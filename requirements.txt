@@ -1,0 +1,2 @@
+# Zero-dependency Python 3 Backend for PulseCrypto
+# This file is intentionally left blank because the backend only uses Python standard libraries.
