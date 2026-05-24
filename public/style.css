@@ -1861,5 +1861,156 @@ body {
     }
 }
 
+/* ==========================================================================
+   Mobile Bottom Tab Navigation & Layout Sorting
+   ========================================================================== */
+.mobile-nav-bar {
+    display: none;
+}
+
+@media (max-width: 900px) {
+    body {
+        padding-bottom: 80px !important;
+    }
+    
+    .mobile-nav-bar {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 64px;
+        background: rgba(13, 18, 32, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-top: 1px solid var(--border-color);
+        box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: space-around;
+        align-items: center;
+        padding: 0 12px;
+    }
+    
+    .mobile-nav-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        cursor: pointer;
+        transition: var(--transition);
+        flex: 1;
+        height: 100%;
+        padding: 8px 0;
+        outline: none;
+    }
+    
+    .mobile-nav-btn i {
+        width: 20px;
+        height: 20px;
+    }
+    
+    .mobile-nav-btn span {
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .mobile-nav-btn:hover {
+        color: var(--text-secondary);
+    }
+    
+    .mobile-nav-btn.active {
+        color: var(--accent-cyan);
+        text-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+    }
+    
+    /* Toggle Panel Visibility based on Active Tab class */
+    .control-panel,
+    .feed-container,
+    .summary-panel,
+    .stats-grid {
+        display: none !important;
+    }
+
+    body.show-tab-focus .stats-grid {
+        display: flex !important;
+        overflow-x: auto;
+        gap: 12px;
+        padding: 4px 4px 12px 4px;
+        margin-bottom: 12px;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+    }
+    
+    body.show-tab-focus .stats-grid .stat-card {
+        flex: 0 0 200px;
+        scroll-snap-align: start;
+        margin: 0;
+    }
+    
+    body.show-tab-focus .feed-container {
+        display: flex !important;
+        flex-direction: column;
+    }
+    
+    /* Re-order elements in news feed: focus card (chart) first, then header, then feed */
+    body.show-tab-focus .feed-container .feed-header {
+        order: 2;
+        margin-top: 16px;
+    }
+    
+    body.show-tab-focus .feed-container .coin-focus-card {
+        order: 1;
+        display: flex !important;
+    }
+    
+    body.show-tab-focus .feed-container .feed-stream {
+        order: 3;
+    }
+
+    /* Alerts Tab */
+    body.show-tab-alerts .control-panel {
+        display: flex !important;
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    body.show-tab-alerts .control-panel > * {
+        display: none !important;
+    }
+    
+    body.show-tab-alerts .control-panel .alerts-sidebar-section {
+        display: block !important;
+    }
+
+    /* Filters Tab */
+    body.show-tab-filters .control-panel {
+        display: flex !important;
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    body.show-tab-filters .control-panel > * {
+        display: block !important;
+    }
+    
+    body.show-tab-filters .control-panel .alerts-sidebar-section {
+        display: none !important;
+    }
+
+    /* Insights Tab */
+    body.show-tab-insights .summary-panel {
+        display: flex !important;
+        flex-direction: column;
+        width: 100%;
+    }
+}
+
 
 

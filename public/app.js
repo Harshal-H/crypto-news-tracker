@@ -107,6 +107,8 @@ async function refreshData() {
 // Setup Event Listeners
 // ==========================================================================
 function setupEventListeners() {
+    setupMobileTabs();
+    
     // Search filter input
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
@@ -1534,5 +1536,37 @@ function playAlertSound() {
     } catch (e) {
         console.error("Audio playback error:", e);
     }
+}
+
+function setupMobileTabs() {
+    // Set default active tab class on body
+    document.body.classList.add('show-tab-focus');
+    
+    const navBtns = document.querySelectorAll('.mobile-nav-btn');
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetTab = btn.dataset.tab;
+            
+            // Toggle active button style
+            navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Toggle body class
+            document.body.classList.remove('show-tab-focus', 'show-tab-alerts', 'show-tab-filters', 'show-tab-insights');
+            
+            if (targetTab === 'tab-focus') {
+                document.body.classList.add('show-tab-focus');
+            } else if (targetTab === 'tab-alerts') {
+                document.body.classList.add('show-tab-alerts');
+            } else if (targetTab === 'tab-filters') {
+                document.body.classList.add('show-tab-filters');
+            } else if (targetTab === 'tab-insights') {
+                document.body.classList.add('show-tab-insights');
+            }
+            
+            // Scroll to top of window to make sure they see the tab content
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        });
+    });
 }
 
