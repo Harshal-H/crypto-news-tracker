@@ -482,6 +482,53 @@ def fetch_historical_prices(coin):
         }
         return mock_data
 
+def send_email_alert(coin, direction, target, current, recipient):
+    """Send an email notification using standard smtplib and environment variables."""
+    import smtplib
+    from email.mime.text import MIMEText
+    
+    smtp_user = os.environ.get('SMTP_USER')
+    smtp_pass = os.environ.get('SMTP_PASS')
+    smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+    try:
+        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+    except Exception:
+        smtp_port = 587
+        
+    if not smtp_user or not smtp_pass:
+        print("SMTP_USER and SMTP_PASS environment variables are not configured. Skipping email alert.")
+        return False
+        
+    subject = f"🚨 PulseCrypto Price Alert: {coin} Crossed {direction} {target}"
+    body = (
+        f"PulseCrypto Price Alert Triggered!\n\n"
+        f"Asset: {coin}\n"
+        f"Condition: Price crossed {direction} ${target}\n"
+        f"Current Market Price: ${current}\n"
+        f"Trigger Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+        f"Open PulseCrypto Dashboard to manage your alerts.\n"
+    )
+    
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = smtp_user
+    msg['To'] = recipient
+    
+    try:
+        print(f"Attempting to send email alert to {recipient} via {smtp_host}:{smtp_port}...")
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port)
+            server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(smtp_user, [recipient], msg.as_string())
+        server.close()
+        print("Email alert sent successfully!")
+        return True
+    except Exception as e:
+        print(f"Failed to send email alert: {e}")
+        return False
 
 class ApiRequestHandler(http.server.BaseHTTPRequestHandler):
     def end_headers(self):
@@ -552,6 +599,29 @@ class ApiRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
             return
 
+        elif route == '/api/alerts/trigger':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            try:
+                coin = params.get('coin', 'BTC')
+                direction = params.get('direction', 'above')
+                target = params.get('target', '0')
+                current = params.get('current', '0')
+                email = params.get('email', '')
+                
+                import urllib.parse
+                email = urllib.parse.unquote(email)
+                
+                success = False
+                if email:
+                    success = send_email_alert(coin, direction, target, current, email)
+                
+                self.wfile.write(json.dumps({"success": success}).encode('utf-8'))
+            except Exception as e:
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+            return
+
         # Static Files Routing
         # Default file: index.html
         path_to_serve = route
@@ -596,7 +666,7 @@ def run():
     os.makedirs(PUBLIC_DIR, exist_ok=True)
     
     server_address = ('', PORT)
-    with socketserver.TCPServer(server_address, ApiRequestHandler) as httpd:
+    with http.server.ThreadingHTTPServer(server_address, ApiRequestHandler) as httpd:
         print(f"==========================================================")
         print(f" Crypto News Tracker Local Server running on port {PORT} ")
         print(f" Open http://localhost:{PORT} in your web browser       ")

@@ -6,6 +6,7 @@ const state = {
     prices: {},
     summary: {},
     bookmarks: JSON.parse(localStorage.getItem('pulse_bookmarks') || '[]'),
+    alerts: JSON.parse(localStorage.getItem('pulse_alerts') || '[]'),
     filters: {
         coin: 'All',
         source: 'All',
@@ -51,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initApp() {
     updateBookmarkBadge();
+    requestNotificationPermission();
     fetchData();
 }
 
@@ -67,6 +69,7 @@ async function fetchData() {
         state.prices = pricesRes;
         state.summary = summaryRes;
         
+        checkPriceAlerts();
         renderAll();
     } catch (error) {
         console.error("Error loading application data:", error);
@@ -89,6 +92,7 @@ async function refreshData() {
         state.prices = pricesRes;
         state.summary = summaryRes;
         
+        checkPriceAlerts();
         renderAll();
     } catch (error) {
         console.error("Error refreshing feed:", error);
@@ -220,6 +224,7 @@ function renderAll() {
     renderTrendingCoins();
     renderInsightsAccordion();
     renderVolumeList();
+    renderActiveAlertsSidebar();
     
     // Update the Coin Focus Panel (default to BTC if "All" is active)
     const activeCoin = state.filters.coin === 'All' ? 'BTC' : state.filters.coin;
@@ -963,13 +968,37 @@ function renderFocusCardContent(symbol, pricesData) {
     container.innerHTML = `
         <div class="focus-header">
             <div class="focus-coin-info">
-                <h3>${coinName} <span>(${symbol})</span></h3>
+                <h3 style="display: flex; align-items: center; gap: 8px;">
+                    ${coinName} <span>(${symbol})</span>
+                    <button class="bell-btn" id="bell-alert-btn" title="Set Price Alert" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
+                        <i data-lucide="bell" style="width: 14px; height: 14px;"></i>
+                    </button>
+                </h3>
                 <div class="focus-price-container">
                     <span class="focus-price">$${priceText}</span>
                     <span class="focus-change ${changeClass}">${changeText}</span>
                 </div>
             </div>
             <span class="ai-badge"><i data-lucide="sparkles"></i> Options Advisor</span>
+        </div>
+
+        <!-- Toggleable Alert Creation Panel -->
+        <div class="focus-alert-panel" id="focus-alert-form" style="display: none;">
+            <h4>Create Alert for ${symbol}</h4>
+            <div class="alert-form-row">
+                <select id="alert-direction">
+                    <option value="above">Crosses Above (▲)</option>
+                    <option value="below">Crosses Below (▼)</option>
+                </select>
+                <input type="number" id="alert-target-price" value="${coinPriceInfo.usd}" step="any">
+            </div>
+            <div class="alert-form-row">
+                <input type="email" id="alert-email" placeholder="Email Address (optional)">
+            </div>
+            <div class="alert-form-actions">
+                <button class="tag-btn active" id="save-alert-btn">Create Alert</button>
+                <button class="tag-btn" id="cancel-alert-btn">Cancel</button>
+            </div>
         </div>
         
         <!-- Interactive Chart Wrapper -->
@@ -1009,6 +1038,64 @@ function renderFocusCardContent(symbol, pricesData) {
     `;
     
     lucide.createIcons();
+    
+    // Alert button trigger
+    const bellBtn = document.getElementById('bell-alert-btn');
+    const alertForm = document.getElementById('focus-alert-form');
+    const cancelBtn = document.getElementById('cancel-alert-btn');
+    const saveBtn = document.getElementById('save-alert-btn');
+    
+    if (bellBtn && alertForm) {
+        bellBtn.addEventListener('click', () => {
+            const isVisible = alertForm.style.display === 'flex';
+            alertForm.style.display = isVisible ? 'none' : 'flex';
+            bellBtn.classList.toggle('active', !isVisible);
+        });
+    }
+    
+    if (cancelBtn && alertForm && bellBtn) {
+        cancelBtn.addEventListener('click', () => {
+            alertForm.style.display = 'none';
+            bellBtn.classList.remove('active');
+        });
+    }
+    
+    if (saveBtn && alertForm && bellBtn) {
+        saveBtn.addEventListener('click', () => {
+            const dir = document.getElementById('alert-direction').value;
+            const price = parseFloat(document.getElementById('alert-target-price').value);
+            const email = document.getElementById('alert-email').value.trim();
+            
+            if (isNaN(price) || price <= 0) {
+                alert("Please enter a valid target price.");
+                return;
+            }
+            
+            // Add alert to state
+            const newAlert = {
+                id: 'alert-' + Date.now(),
+                symbol: symbol,
+                direction: dir,
+                price: price,
+                email: email,
+                triggered: false
+            };
+            
+            state.alerts.push(newAlert);
+            localStorage.setItem('pulse_alerts', JSON.stringify(state.alerts));
+            
+            // Render active alerts sidebar
+            renderActiveAlertsSidebar();
+            
+            // Success indicator
+            showToastAlert("Price Alert Created", `Target: ${symbol} goes ${dir} $${price.toLocaleString()}`);
+            
+            // Hide form
+            alertForm.style.display = 'none';
+            bellBtn.classList.remove('active');
+        });
+    }
+    
     setupChartHoverHandlers(pricesData);
 }
 
@@ -1239,5 +1326,213 @@ function renderVolumeList() {
     });
     
     container.innerHTML = html;
+}
+
+// ==========================================================================
+// Alerts Engine & Notifications
+// ==========================================================================
+
+function requestNotificationPermission() {
+    if ('Notification' in window) {
+        if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+            Notification.requestPermission();
+        }
+    }
+}
+
+function renderActiveAlertsSidebar() {
+    const container = document.getElementById('active-alerts-list');
+    if (!container) return;
+    
+    if (state.alerts.length === 0) {
+        container.innerHTML = '<span class="no-alerts-label">No active price alerts</span>';
+        return;
+    }
+    
+    let html = '';
+    state.alerts.forEach(alert => {
+        const directionSymbol = alert.direction === 'above' ? '▲' : '▼';
+        const directionClass = alert.direction;
+        const emailLabel = alert.email ? `<span style="font-size:0.6rem; color:var(--text-muted); display:block; margin-top:2px;">Email: ${escapeHTML(alert.email)}</span>` : '';
+        
+        html += `
+            <div class="alert-sidebar-item" id="${alert.id}">
+                <div class="alert-sidebar-info">
+                    <div>
+                        <span class="alert-coin-badge">${alert.symbol}</span>
+                        <span class="alert-condition ${directionClass}">${directionSymbol} $${alert.price.toLocaleString()}</span>
+                    </div>
+                    ${emailLabel}
+                </div>
+                <button class="alert-delete-btn" onclick="removeAlert('${alert.id}')" title="Delete Alert">
+                    <i data-lucide="trash-2" style="width:14px; height:14px;"></i>
+                </button>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    lucide.createIcons();
+}
+
+function removeAlert(id) {
+    state.alerts = state.alerts.filter(alert => alert.id !== id);
+    localStorage.setItem('pulse_alerts', JSON.stringify(state.alerts));
+    renderActiveAlertsSidebar();
+}
+
+async function checkPriceAlerts() {
+    if (state.alerts.length === 0 || !state.prices) return;
+    
+    const activeAlerts = [];
+    const triggeredAlerts = [];
+    
+    for (const alert of state.alerts) {
+        const coinId = coinIdMapping[alert.symbol];
+        if (!coinId || !state.prices[coinId]) {
+            activeAlerts.push(alert);
+            continue;
+        }
+        
+        const currentPrice = state.prices[coinId].usd;
+        let isTriggered = false;
+        
+        if (alert.direction === 'above' && currentPrice >= alert.price) {
+            isTriggered = true;
+        } else if (alert.direction === 'below' && currentPrice <= alert.price) {
+            isTriggered = true;
+        }
+        
+        if (isTriggered) {
+            triggeredAlerts.push({ alert, currentPrice });
+        } else {
+            activeAlerts.push(alert);
+        }
+    }
+    
+    if (triggeredAlerts.length > 0) {
+        // Update local state and storage
+        state.alerts = activeAlerts;
+        localStorage.setItem('pulse_alerts', JSON.stringify(state.alerts));
+        renderActiveAlertsSidebar();
+        
+        // Handle triggers
+        for (const item of triggeredAlerts) {
+            const { alert, currentPrice } = item;
+            const message = `${alert.symbol} crossed ${alert.direction} $${alert.price.toLocaleString()} (Current: $${currentPrice.toLocaleString()})`;
+            
+            // 1. Play Sound
+            playAlertSound();
+            
+            // 2. Web Toast
+            showToastAlert("Price Alert Triggered!", message);
+            
+            // 3. System Notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification("PulseCrypto Alert", {
+                    body: message,
+                    icon: '/favicon.ico'
+                });
+            }
+            
+            // 4. Send Email Alert (Backend request)
+            if (alert.email) {
+                try {
+                    const encodedEmail = encodeURIComponent(alert.email);
+                    const url = `/api/alerts/trigger?coin=${alert.symbol}&direction=${alert.direction}&target=${alert.price}&current=${currentPrice}&email=${encodedEmail}`;
+                    fetch(url)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log(`Email alert sent successfully to ${alert.email}`);
+                            } else {
+                                console.warn(`Email alert failed or SMTP not configured:`, data.error);
+                            }
+                        })
+                        .catch(err => console.error("Error triggering email alert:", err));
+                } catch (e) {
+                    console.error("Failed to make email alert request:", e);
+                }
+            }
+        }
+    }
+}
+
+function showToastAlert(title, message) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast-alert';
+    
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i data-lucide="bell-ring"></i>
+        </div>
+        <div class="toast-body">
+            <strong>${escapeHTML(title)}</strong>
+            <span>${escapeHTML(message)}</span>
+        </div>
+        <button class="toast-close" title="Close">
+            <i data-lucide="x"></i>
+        </button>
+    `;
+    
+    container.appendChild(toast);
+    lucide.createIcons();
+    
+    // Add close event
+    const closeBtn = toast.querySelector('.toast-close');
+    const dismiss = () => {
+        toast.classList.add('leaving');
+        setTimeout(() => {
+            if (toast.parentNode === container) {
+                container.removeChild(toast);
+            }
+            if (container.children.length === 0 && container.parentNode) {
+                document.body.removeChild(container);
+            }
+        }, 300);
+    };
+    
+    closeBtn.addEventListener('click', dismiss);
+    
+    // Auto dismiss after 8s
+    setTimeout(() => {
+        if (toast.parentNode === container) {
+            dismiss();
+        }
+    }, 8000);
+}
+
+function playAlertSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        // C5 followed by G5
+        const now = ctx.currentTime;
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        
+        osc.frequency.setValueAtTime(783.99, now + 0.4); // G5
+        gain.gain.setValueAtTime(0.2, now + 0.4);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
+        
+        osc.start(now);
+        osc.stop(now + 0.85);
+    } catch (e) {
+        console.error("Audio playback error:", e);
+    }
 }
 
