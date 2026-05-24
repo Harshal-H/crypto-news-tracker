@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseCrypto | Advanced News Tracker & Sentiment Engine</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Top Price Ticker -->
+    <div class="ticker-wrapper">
+        <div class="ticker-container" id="price-ticker">
+            <!-- Populated via JS -->
+            <div class="ticker-track">
+                <span class="ticker-loading">Loading live coin metrics...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Navigation / Header -->
+    <header class="app-header">
+        <div class="header-logo">
+            <div class="logo-icon">
+                <i data-lucide="activity"></i>
+            </div>
+            <h1>Pulse<span>Crypto</span></h1>
+        </div>
+        <div class="header-actions">
+            <span class="pulse-indicator">
+                <span class="pulse-dot"></span>
+                Live Feed
+            </span>
+            <button id="refresh-btn" class="icon-btn" title="Refresh Feed">
+                <i data-lucide="rotate-cw"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- App Container -->
+    <main class="app-container">
+        <!-- Live Market Stats Cards -->
+        <section class="stats-grid" id="stats-container">
+            <!-- Populated via JS (BTC, ETH, SOL, XRP, ADA cards) -->
+            <div class="stat-card skeleton"></div>
+            <div class="stat-card skeleton"></div>
+            <div class="stat-card skeleton"></div>
+            <div class="stat-card skeleton"></div>
+            <div class="stat-card skeleton"></div>
+        </section>
+
+        <!-- Content Grid -->
+        <div class="dashboard-layout">
+            <!-- Left Panel: Control Center -->
+            <aside class="control-panel">
+                <div class="panel-section search-section">
+                    <h3>Search & Filters</h3>
+                    <div class="search-box">
+                        <i data-lucide="search"></i>
+                        <input type="text" id="search-input" placeholder="Search headlines, events...">
+                    </div>
+                </div>
+
+                <div class="panel-section filter-section">
+                    <h4>24h Trading Volume</h4>
+                    <div class="volume-list" id="coin-volume-list">
+                        <div class="volume-item skeleton-mini"></div>
+                        <div class="volume-item skeleton-mini"></div>
+                        <div class="volume-item skeleton-mini"></div>
+                        <div class="volume-item skeleton-mini"></div>
+                        <div class="volume-item skeleton-mini"></div>
+                    </div>
+                </div>
+
+                <div class="panel-section filter-section">
+                    <h4>Filter by Source</h4>
+                    <div class="source-filters" id="source-filters">
+                        <button class="source-btn active" data-source="All">All Sources</button>
+                        <button class="source-btn" data-source="CoinDesk">CoinDesk</button>
+                        <button class="source-btn" data-source="Cointelegraph">Cointelegraph</button>
+                        <button class="source-btn" data-source="Decrypt">Decrypt</button>
+                        <button class="source-btn" data-source="CryptoNews">CryptoNews</button>
+                    </div>
+                </div>
+
+                <div class="panel-section filter-section">
+                    <h4>Sentiment Filter</h4>
+                    <div class="sentiment-filters" id="sentiment-filters">
+                        <button class="sentiment-filter-btn active" data-sent="All">All</button>
+                        <button class="sentiment-filter-btn pos" data-sent="positive"><i data-lucide="trending-up"></i> Bullish</button>
+                        <button class="sentiment-filter-btn neu" data-sent="neutral"><i data-lucide="minus"></i> Neutral</button>
+                        <button class="sentiment-filter-btn neg" data-sent="negative"><i data-lucide="trending-down"></i> Bearish</button>
+                    </div>
+                </div>
+
+                <div class="panel-section view-toggle-section">
+                    <button id="bookmark-toggle-btn" class="toggle-btn">
+                        <i data-lucide="bookmark"></i>
+                        <span>Show Saved Articles</span>
+                        <span class="badge" id="bookmark-count">0</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Center Panel: News Feed Stream -->
+            <section class="feed-container">
+                <div class="feed-header">
+                    <h2 id="feed-title">Latest Crypto Market News</h2>
+                    <span class="feed-count" id="feed-count-display">Showing 0 articles</span>
+                </div>
+                
+                <!-- Coin Focus Panel (Historical Chart & Option Trend Indicator) -->
+                <div class="coin-focus-card" id="coin-focus-container">
+                    <div class="focus-loading">
+                        <span class="pulse-dot"></span>
+                        Loading market chart and options trends...
+                    </div>
+                </div>
+                
+                <div class="feed-stream" id="news-feed">
+                    <!-- News Card Skeletons -->
+                    <div class="news-card skeleton"></div>
+                    <div class="news-card skeleton"></div>
+                    <div class="news-card skeleton"></div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Market Summary & Insights -->
+            <aside class="summary-panel">
+                <!-- Market Sentiment Gauge -->
+                <div class="summary-card sentiment-card">
+                    <h3>Market Sentiment Meter</h3>
+                    <div class="gauge-container">
+                        <svg class="gauge" viewBox="0 0 100 50">
+                            <!-- Gauge background arc -->
+                            <path class="gauge-bg" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke-width="8"></path>
+                            <!-- Colored indicators overlay -->
+                            <path class="gauge-val" id="gauge-fill" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke-width="8" stroke-dasharray="125.6" stroke-dashoffset="125.6"></path>
+                        </svg>
+                        <div class="gauge-needle-center"></div>
+                        <div class="gauge-needle" id="gauge-needle"></div>
+                        <div class="gauge-value" id="sentiment-value">50</div>
+                        <div class="gauge-label" id="sentiment-label">Neutral</div>
+                    </div>
+                    <div class="gauge-ticks">
+                        <span>Fear</span>
+                        <span>Neutral</span>
+                        <span>Greed</span>
+                    </div>
+                </div>
+
+                <!-- Daily AI Briefing Summary -->
+                <div class="summary-card brief-card">
+                    <div class="summary-card-header">
+                        <h3>Pulse Briefing</h3>
+                        <span class="ai-badge"><i data-lucide="sparkles"></i> Synthesized</span>
+                    </div>
+                    <div class="brief-content" id="daily-brief-content">
+                        <div class="skeleton-text"></div>
+                        <div class="skeleton-text"></div>
+                        <div class="skeleton-text"></div>
+                    </div>
+                </div>
+
+                <!-- Trending Topics / Coin Mentions -->
+                <div class="summary-card trending-card">
+                    <h3>Trending Coin Mentions</h3>
+                    <div class="trending-list" id="trending-list-container">
+                        <!-- Populated via JS -->
+                        <div class="trending-item skeleton-mini"></div>
+                        <div class="trending-item skeleton-mini"></div>
+                        <div class="trending-item skeleton-mini"></div>
+                    </div>
+                </div>
+
+                <!-- Coin specific accordion summaries -->
+                <div class="summary-card insights-card">
+                    <h3>Coin-Specific Insights</h3>
+                    <div class="accordion-container" id="insights-accordion">
+                        <!-- Populated via JS (BTC, ETH, etc.) -->
+                        <div class="accordion-skeleton"></div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </main>
+
+    <!-- Article Details Modal -->
+    <div class="modal-overlay" id="details-modal">
+        <div class="modal-container">
+            <button class="modal-close" id="modal-close-btn">
+                <i data-lucide="x"></i>
+            </button>
+            <div class="modal-body" id="modal-body-content">
+                <!-- Populated via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Script -->
+    <script src="app.js"></script>
+</body>
+</html>
