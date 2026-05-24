@@ -10,7 +10,7 @@ import random
 import xml.etree.ElementTree as ET
 from urllib.error import URLError
 
-PORT = 8000
+PORT = int(os.environ.get('PORT', 8000))
 PUBLIC_DIR = os.path.join(os.path.dirname(__file__), 'public')
 
 # In-memory caches
