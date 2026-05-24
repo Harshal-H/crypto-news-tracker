@@ -425,8 +425,8 @@ def fetch_live_prices():
         }
 
 
-def generate_mock_historical(coin):
-    """Generate a sequence of [timestamp, price] over the last 24h as a fallback."""
+def generate_mock_historical(coin, days='1'):
+    """Generate a sequence of [timestamp, price] over a timeframe as a fallback."""
     now_ms = int(time.time() * 1000)
     prices = []
     base_price = {
@@ -437,46 +437,62 @@ def generate_mock_historical(coin):
         'cardano': 0.244
     }.get(coin, 100.0)
     
+    try:
+        days_int = int(days)
+    except ValueError:
+        days_int = 1
+        
+    if days_int == 1:
+        steps = 24
+        step_ms = 3600000 # 1h
+    elif days_int == 7:
+        steps = 84 # every 2h for 7 days
+        step_ms = 7200000
+    else: # 30d
+        steps = 30
+        step_ms = 86400000 # 24h
+        
     current_val = base_price
-    for i in range(24):
-        ts = now_ms - (23 - i) * 3600000
+    for i in range(steps):
+        ts = now_ms - (steps - 1 - i) * step_ms
         change = random.uniform(-0.015, 0.018)
         current_val = current_val * (1 + change)
         prices.append([ts, round(current_val, 4)])
     return prices
 
-def fetch_historical_prices(coin):
-    """Proxy CoinGecko 24h historical price data with caching and automatic mocks."""
+def fetch_historical_prices(coin, days='1'):
+    """Proxy CoinGecko historical price data with caching and automatic mocks."""
     current_time = time.time()
-    if coin in HIST_CACHE and (current_time - HIST_CACHE[coin]['last_updated'] < 300):
-        return HIST_CACHE[coin]['data']
+    cache_key = f"{coin}_{days}"
+    if cache_key in HIST_CACHE and (current_time - HIST_CACHE[cache_key]['last_updated'] < 300):
+        return HIST_CACHE[cache_key]['data']
         
-    url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart?vs_currency=usd&days=1"
+    url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart?vs_currency=usd&days={days}"
     headers = {'User-Agent': 'Mozilla/5.0'}
     req = urllib.request.Request(url, headers=headers)
     
     try:
-        print(f"Proxying CoinGecko historical data for {coin}...")
+        print(f"Proxying CoinGecko historical data for {coin} (days={days})...")
         with urllib.request.urlopen(req, timeout=5) as response:
             data = json.loads(response.read().decode('utf-8'))
             prices = data.get('prices', [])
             if not prices:
                 raise ValueError("Empty prices from CoinGecko")
-            HIST_CACHE[coin] = {
+            HIST_CACHE[cache_key] = {
                 'data': prices,
                 'last_updated': current_time
             }
             return prices
     except Exception as e:
-        print(f"Error fetching historical prices for {coin}: {e}")
-        if coin in HIST_CACHE:
+        print(f"Error fetching historical prices for {coin} (days={days}): {e}")
+        if cache_key in HIST_CACHE:
             print("Using stale historical cache.")
-            return HIST_CACHE[coin]['data']
+            return HIST_CACHE[cache_key]['data']
             
-        print(f"Returning mock historical data for {coin}.")
-        mock_data = generate_mock_historical(coin)
+        print(f"Returning mock historical data for {coin} (days={days}).")
+        mock_data = generate_mock_historical(coin, days)
         # Don't cache mock data permanently, just a short grace period
-        HIST_CACHE[coin] = {
+        HIST_CACHE[cache_key] = {
             'data': mock_data,
             'last_updated': current_time - 240 # expires in 60s
         }
@@ -593,7 +609,8 @@ class ApiRequestHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             try:
                 coin = params.get('coin', 'bitcoin')
-                historical = fetch_historical_prices(coin)
+                days = params.get('days', '1')
+                historical = fetch_historical_prices(coin, days)
                 self.wfile.write(json.dumps(historical).encode('utf-8'))
             except Exception as e:
                 self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))

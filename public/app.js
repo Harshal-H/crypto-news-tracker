@@ -7,6 +7,7 @@ const state = {
     summary: {},
     bookmarks: JSON.parse(localStorage.getItem('pulse_bookmarks') || '[]'),
     alerts: JSON.parse(localStorage.getItem('pulse_alerts') || '[]'),
+    chartDays: '1',
     filters: {
         coin: 'All',
         source: 'All',
@@ -54,6 +55,7 @@ function initApp() {
     updateBookmarkBadge();
     requestNotificationPermission();
     fetchData();
+    initLiveWebSocket();
 }
 
 async function fetchData() {
@@ -289,7 +291,7 @@ function renderTicker() {
             const changeClass = isPos ? 'pos' : 'neg';
             
             itemsHtml += `
-                <div class="ticker-item" onclick="filterByCoin('${sym}')">
+                <div class="ticker-item" data-ticker-item="${sym}" onclick="filterByCoin('${sym}')">
                     <span class="ticker-symbol">${sym}/USD</span>
                     <span class="ticker-price">$${price}</span>
                     <span class="ticker-change ${changeClass}">${changeIcon} ${Math.abs(change).toFixed(2)}%</span>
@@ -336,7 +338,7 @@ function renderStatsCards() {
         const fillGradId = `spark-grad-${coin.symbol}`;
         
         html += `
-            <div class="stat-card" onclick="filterByCoin('${coin.symbol}')">
+            <div class="stat-card" data-coin-card="${coin.symbol}" onclick="filterByCoin('${coin.symbol}')">
                 <div class="stat-header">
                     <div>
                         <div class="stat-coin-name">${coin.name}</div>
@@ -876,19 +878,20 @@ async function triggerCoinFocusUpdate(symbol) {
     const coinId = coinIdMapping[symbol];
     if (!coinId) return;
     
-    // Show loading skeleton if the coin selection changes
-    if (lastFetchedFocusSymbol !== symbol) {
+    // Show loading skeleton if the coin selection or timeframe changes
+    const cacheKey = symbol + '_' + state.chartDays;
+    if (lastFetchedFocusSymbol !== cacheKey) {
         container.innerHTML = `
             <div class="focus-loading">
                 <div class="pulse-dot"></div>
                 Fetching historical price and options trends for ${coinNameMapping[symbol]}...
             </div>
         `;
-        lastFetchedFocusSymbol = symbol;
+        lastFetchedFocusSymbol = cacheKey;
     }
     
     try {
-        const response = await fetch(`/api/historical?coin=${coinId}`);
+        const response = await fetch(`/api/historical?coin=${coinId}&days=${state.chartDays}`);
         const prices = await response.json();
         
         if (response.ok && prices && prices.length > 0) {
@@ -977,8 +980,8 @@ function renderFocusCardContent(symbol, pricesData) {
                     </button>
                 </h3>
                 <div class="focus-price-container">
-                    <span class="focus-price">$${priceText}</span>
-                    <span class="focus-change ${changeClass}">${changeText}</span>
+                    <span class="focus-price focus-price-val">$${priceText}</span>
+                    <span class="focus-change focus-change-val ${changeClass}">${changeText}</span>
                 </div>
             </div>
             <span class="ai-badge"><i data-lucide="sparkles"></i> Options Advisor</span>
@@ -994,13 +997,38 @@ function renderFocusCardContent(symbol, pricesData) {
                 </select>
                 <input type="number" id="alert-target-price" value="${coinPriceInfo.usd}" step="any">
             </div>
-            <div class="alert-form-row">
-                <input type="email" id="alert-email" placeholder="Email Address (optional)">
+            <div class="alert-form-row channels-row" style="margin: 4px 0 8px 0; display: flex; gap: 16px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; cursor: pointer; color: var(--text-secondary);">
+                    <input type="checkbox" id="alert-channel-browser" checked style="width: auto; margin: 0;">
+                    Browser Alert (Toast/Sound)
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; cursor: pointer; color: var(--text-secondary);">
+                    <input type="checkbox" id="alert-channel-email" style="width: auto; margin: 0;">
+                    Email Alert
+                </label>
+            </div>
+            <div class="alert-form-row" id="email-input-row" style="display: none; width: 100%;">
+                <input type="email" id="alert-email" placeholder="Enter recipient email address" style="width: 100%;">
             </div>
             <div class="alert-form-actions">
                 <button class="tag-btn active" id="save-alert-btn">Create Alert</button>
                 <button class="tag-btn" id="cancel-alert-btn">Cancel</button>
             </div>
+        </div>
+        
+        <!-- Timeframe Selector -->
+        <div class="timeframe-selector">
+            <button class="timeframe-btn ${state.chartDays === '1' ? 'active' : ''}" data-days="1">24h</button>
+            <button class="timeframe-btn ${state.chartDays === '7' ? 'active' : ''}" data-days="7">7d</button>
+            <button class="timeframe-btn ${state.chartDays === '30' ? 'active' : ''}" data-days="30">30d</button>
+            <span class="chart-legend">
+                <span style="display:inline-flex; align-items:center; gap:4px; margin-right:8px;">
+                    <span style="display:inline-block; width:12px; height:2px; background: ${isPos ? 'var(--bullish)' : 'var(--bearish)'};"></span> Price
+                </span>
+                <span style="display:inline-flex; align-items:center; gap:4px;">
+                    <span style="display:inline-block; width:12px; height:2px; border-bottom: 2px dotted var(--accent-purple);"></span> SMA-7
+                </span>
+            </span>
         </div>
         
         <!-- Interactive Chart Wrapper -->
@@ -1041,17 +1069,34 @@ function renderFocusCardContent(symbol, pricesData) {
     
     lucide.createIcons();
     
+    // Timeframe selector trigger
+    document.querySelectorAll('.timeframe-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const days = e.target.dataset.days;
+            state.chartDays = days;
+            triggerCoinFocusUpdate(symbol);
+        });
+    });
+    
     // Alert button trigger
     const bellBtn = document.getElementById('bell-alert-btn');
     const alertForm = document.getElementById('focus-alert-form');
     const cancelBtn = document.getElementById('cancel-alert-btn');
     const saveBtn = document.getElementById('save-alert-btn');
+    const emailCheckbox = document.getElementById('alert-channel-email');
+    const emailRow = document.getElementById('email-input-row');
     
     if (bellBtn && alertForm) {
         bellBtn.addEventListener('click', () => {
             const isVisible = alertForm.style.display === 'flex';
             alertForm.style.display = isVisible ? 'none' : 'flex';
             bellBtn.classList.toggle('active', !isVisible);
+        });
+    }
+    
+    if (emailCheckbox && emailRow) {
+        emailCheckbox.addEventListener('change', () => {
+            emailRow.style.display = emailCheckbox.checked ? 'block' : 'none';
         });
     }
     
@@ -1066,10 +1111,22 @@ function renderFocusCardContent(symbol, pricesData) {
         saveBtn.addEventListener('click', () => {
             const dir = document.getElementById('alert-direction').value;
             const price = parseFloat(document.getElementById('alert-target-price').value);
+            const useBrowser = document.getElementById('alert-channel-browser').checked;
+            const useEmail = document.getElementById('alert-channel-email').checked;
             const email = document.getElementById('alert-email').value.trim();
             
             if (isNaN(price) || price <= 0) {
                 alert("Please enter a valid target price.");
+                return;
+            }
+            
+            if (!useBrowser && !useEmail) {
+                alert("Please select at least one notification channel.");
+                return;
+            }
+            
+            if (useEmail && !email) {
+                alert("Please enter a valid email address.");
                 return;
             }
             
@@ -1079,7 +1136,11 @@ function renderFocusCardContent(symbol, pricesData) {
                 symbol: symbol,
                 direction: dir,
                 price: price,
-                email: email,
+                channels: {
+                    browser: useBrowser,
+                    email: useEmail
+                },
+                email: useEmail ? email : '',
                 triggered: false
             };
             
@@ -1123,6 +1184,13 @@ function drawInteractiveChart(pricesData, isBullish) {
         lineD += ` L ${getX(i)} ${getY(prices[i])}`;
     }
     
+    // Calculate SMA-7 path
+    const smaValues = calculateSMA(prices, 7);
+    let smaD = `M ${getX(0)} ${getY(smaValues[0])}`;
+    for (let i = 1; i < smaValues.length; i++) {
+        smaD += ` L ${getX(i)} ${getY(smaValues[i])}`;
+    }
+    
     const bottomY = H - P_y;
     const areaD = `${lineD} L ${getX(prices.length - 1)} ${bottomY} L ${getX(0)} ${bottomY} Z`;
     
@@ -1150,9 +1218,19 @@ function drawInteractiveChart(pricesData, isBullish) {
         <text class="chart-labels-y" x="${P_x - 8}" y="${getY(maxPrice) + 3}" text-anchor="end">${formatYVal(maxPrice)}</text>
     `;
     
+    let labelLeft = '24h ago';
+    let labelMid = '12h ago';
+    if (state.chartDays === '7') {
+        labelLeft = '7d ago';
+        labelMid = '3d ago';
+    } else if (state.chartDays === '30') {
+        labelLeft = '30d ago';
+        labelMid = '15d ago';
+    }
+    
     const axisLabelsX = `
-        <text class="chart-labels-x" x="${P_x}" y="${H - 2}">24h ago</text>
-        <text class="chart-labels-x" x="${P_x + (W - P_x - 10)/2}" y="${H - 2}">12h ago</text>
+        <text class="chart-labels-x" x="${P_x}" y="${H - 2}">${labelLeft}</text>
+        <text class="chart-labels-x" x="${P_x + (W - P_x - 10)/2}" y="${H - 2}">${labelMid}</text>
         <text class="chart-labels-x" x="${W - 20}" y="${H - 2}">Now</text>
     `;
     
@@ -1169,6 +1247,10 @@ function drawInteractiveChart(pricesData, isBullish) {
             ${axisLabelsX}
             <!-- Shaded Area -->
             <path d="${areaD}" fill="url(#${gradId})" style="pointer-events:none;"></path>
+            
+            <!-- SMA Line Path -->
+            <path d="${smaD}" fill="none" stroke="var(--accent-purple)" stroke-width="1.5" stroke-dasharray="2,3" style="pointer-events:none;"></path>
+            
             <!-- Line Path -->
             <path d="${lineD}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" style="pointer-events:none;"></path>
             
@@ -1353,9 +1435,24 @@ function renderActiveAlertsSidebar() {
     
     let html = '';
     state.alerts.forEach(alert => {
+        let channelsBadge = '';
+        if (alert.channels) {
+            if (alert.channels.browser) {
+                channelsBadge += `<span class="alert-badge-icon" title="Browser Alert" style="margin-right: 4px; display: inline-flex; align-items: center;"><i data-lucide="bell" style="width:10px; height:10px; color:var(--accent-cyan);"></i></span>`;
+            }
+            if (alert.channels.email) {
+                channelsBadge += `<span class="alert-badge-icon" title="Email Alert" style="display: inline-flex; align-items: center;"><i data-lucide="mail" style="width:10px; height:10px; color:var(--accent-purple);"></i></span>`;
+            }
+        } else {
+            // backward compatibility
+            channelsBadge += `<span class="alert-badge-icon" title="Browser Alert" style="margin-right: 4px; display: inline-flex; align-items: center;"><i data-lucide="bell" style="width:10px; height:10px; color:var(--accent-cyan);"></i></span>`;
+            if (alert.email) {
+                channelsBadge += `<span class="alert-badge-icon" title="Email Alert" style="display: inline-flex; align-items: center;"><i data-lucide="mail" style="width:10px; height:10px; color:var(--accent-purple);"></i></span>`;
+            }
+        }
+        
         const directionSymbol = alert.direction === 'above' ? '▲' : '▼';
         const directionClass = alert.direction;
-        const emailLabel = alert.email ? `<span style="font-size:0.6rem; color:var(--text-muted); display:block; margin-top:2px;">Email: ${escapeHTML(alert.email)}</span>` : '';
         
         html += `
             <div class="alert-sidebar-item" id="${alert.id}">
@@ -1364,7 +1461,10 @@ function renderActiveAlertsSidebar() {
                         <span class="alert-coin-badge">${alert.symbol}</span>
                         <span class="alert-condition ${directionClass}">${directionSymbol} $${alert.price.toLocaleString()}</span>
                     </div>
-                    ${emailLabel}
+                    <div style="display: flex; gap: 4px; align-items: center; margin-top: 4px;">
+                        ${channelsBadge}
+                        ${alert.email ? `<span style="font-size:0.6rem; color:var(--text-muted); margin-left: 4px;">(${escapeHTML(alert.email)})</span>` : ''}
+                    </div>
                 </div>
                 <button class="alert-delete-btn" onclick="removeAlert('${alert.id}')" title="Delete Alert">
                     <i data-lucide="trash-2" style="width:14px; height:14px;"></i>
@@ -1423,22 +1523,27 @@ async function checkPriceAlerts() {
             const { alert, currentPrice } = item;
             const message = `${alert.symbol} crossed ${alert.direction} $${alert.price.toLocaleString()} (Current: $${currentPrice.toLocaleString()})`;
             
-            // 1. Play Sound
-            playAlertSound();
+            const isBrowser = alert.channels ? alert.channels.browser : true;
+            const isEmail = alert.channels ? alert.channels.email : !!alert.email;
             
-            // 2. Web Toast
-            showToastAlert("Price Alert Triggered!", message);
-            
-            // 3. System Notification
-            if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification("PulseCrypto Alert", {
-                    body: message,
-                    icon: '/favicon.ico'
-                });
+            if (isBrowser) {
+                // 1. Play Sound
+                playAlertSound();
+                
+                // 2. Web Toast
+                showToastAlert("Price Alert Triggered!", message);
+                
+                // 3. System Notification
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification("PulseCrypto Alert", {
+                        body: message,
+                        icon: '/favicon.ico'
+                    });
+                }
             }
             
-            // 4. Send Email Alert (Backend request)
-            if (alert.email) {
+            if (isEmail && alert.email) {
+                // 4. Send Email Alert (Backend request)
                 try {
                     const encodedEmail = encodeURIComponent(alert.email);
                     const url = `/api/alerts/trigger?coin=${alert.symbol}&direction=${alert.direction}&target=${alert.price}&current=${currentPrice}&email=${encodedEmail}`;
@@ -1568,5 +1673,136 @@ function setupMobileTabs() {
             window.scrollTo({ top: 0, behavior: 'instant' });
         });
     });
+}
+
+function calculateSMA(prices, period = 7) {
+    const sma = [];
+    for (let i = 0; i < prices.length; i++) {
+        let sum = 0;
+        let count = 0;
+        for (let j = Math.max(0, i - period + 1); j <= i; j++) {
+            sum += prices[j];
+            count++;
+        }
+        sma.push(sum / count);
+    }
+    return sma;
+}
+
+let liveWs = null;
+function initLiveWebSocket() {
+    const streams = [
+        'btcusdt@ticker',
+        'ethusdt@ticker',
+        'solusdt@ticker',
+        'xrpusdt@ticker',
+        'adausdt@ticker'
+    ].join('/');
+    
+    const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+    
+    try {
+        console.log("Opening Binance WebSocket stream...");
+        liveWs = new WebSocket(wsUrl);
+        
+        liveWs.onmessage = (event) => {
+            const payload = JSON.parse(event.data);
+            if (!payload || !payload.data) return;
+            
+            const ticker = payload.data;
+            const sym = ticker.s.replace('USDT', ''); // e.g. BTC
+            const coinId = coinIdMapping[sym];
+            if (!coinId) return;
+            
+            const price = parseFloat(ticker.c);
+            const change = parseFloat(ticker.P);
+            const volume = parseFloat(ticker.q); // quote asset volume is equivalent to USD volume!
+            
+            // Update state in memory
+            if (!state.prices[coinId]) state.prices[coinId] = {};
+            state.prices[coinId].usd = price;
+            state.prices[coinId].usd_24h_change = change;
+            state.prices[coinId].usd_24h_vol = volume;
+            
+            // Verify alerts instantly
+            checkPriceAlerts();
+            
+            // Update UI nodes targeting this symbol
+            updateLiveUI(sym, price, change, volume);
+        };
+        
+        liveWs.onerror = (err) => {
+            console.error("Binance WebSocket error:", err);
+        };
+        
+        liveWs.onclose = () => {
+            console.log("Binance WebSocket closed. Reconnecting in 5 seconds...");
+            setTimeout(initLiveWebSocket, 5000);
+        };
+    } catch (e) {
+        console.error("Failed to connect to Binance WebSocket:", e);
+    }
+}
+
+function updateLiveUI(symbol, price, change, volume) {
+    // 1. Ticker Elements
+    const tickerItems = document.querySelectorAll(`[data-ticker-item="${symbol}"]`);
+    tickerItems.forEach(el => {
+        const priceEl = el.querySelector('.ticker-price');
+        const changeEl = el.querySelector('.ticker-change');
+        if (priceEl) {
+            priceEl.innerText = '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (changeEl) {
+            const isPos = change >= 0;
+            changeEl.innerText = `${isPos ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%`;
+            changeEl.className = `ticker-change ${isPos ? 'pos' : 'neg'}`;
+        }
+    });
+    
+    // 2. Stats Cards
+    const statCard = document.querySelector(`[data-coin-card="${symbol}"]`);
+    if (statCard) {
+        const priceEl = statCard.querySelector('.stat-price');
+        const changeEl = statCard.querySelector('.stat-change');
+        if (priceEl) {
+            priceEl.innerText = '$' + price.toLocaleString('en-US', { 
+                minimumFractionDigits: symbol === 'ADA' ? 4 : 2, 
+                maximumFractionDigits: symbol === 'ADA' ? 4 : 2 
+            });
+        }
+        if (changeEl) {
+            const isPos = change >= 0;
+            changeEl.innerText = `${isPos ? '+' : ''}${change.toFixed(2)}%`;
+            changeEl.className = `stat-change ${isPos ? 'pos' : 'neg'}`;
+        }
+    }
+    
+    // 3. Sidebar Volume Item
+    const volItem = document.querySelector(`.volume-item[data-coin="${symbol}"]`);
+    if (volItem) {
+        const valEl = volItem.querySelector('.volume-value');
+        if (valEl) {
+            valEl.innerText = '$' + Math.round(volume).toLocaleString();
+        }
+    }
+    
+    // 4. Focused Coin Card Price Display (if it matches the active focussed coin)
+    const activeCoin = state.filters.coin === 'All' ? 'BTC' : state.filters.coin;
+    if (activeCoin === symbol) {
+        const focusPrice = document.querySelector('.focus-price-val');
+        const focusChange = document.querySelector('.focus-change-val');
+        if (focusPrice) {
+            focusPrice.innerText = '$' + price.toLocaleString('en-US', {
+                minimumFractionDigits: symbol === 'ADA' ? 4 : 2,
+                maximumFractionDigits: symbol === 'ADA' ? 4 : 2
+            });
+        }
+        if (focusChange) {
+            const isPos = change >= 0;
+            focusChange.innerText = `${isPos ? '+' : ''}${change.toFixed(2)}%`;
+            focusChange.className = `focus-change-val ${isPos ? 'pos' : 'neg'}`;
+        }
+    }
 }
 
