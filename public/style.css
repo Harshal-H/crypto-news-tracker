@@ -2263,6 +2263,12 @@ body.light-theme .app-header {
     box-shadow: 0 4px 20px rgba(15, 23, 42, 0.03);
 }
 
+body.light-theme .header-logo h1 {
+    background: linear-gradient(to right, var(--text-primary), var(--accent-purple)) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+
 body.light-theme .ticker-wrapper {
     background: #f1f5f9;
     border-bottom: 1px solid var(--border-color);
@@ -2543,6 +2549,200 @@ body.light-theme .focus-coin-select {
 .focus-coin-select:focus {
     border-color: var(--accent-cyan);
     box-shadow: 0 0 8px rgba(0, 242, 254, 0.15);
+}
+
+/* ==========================================================================
+   Minimalist Dashboard & Pane Overrides
+   ========================================================================== */
+.panel-section,
+.summary-card,
+.coin-focus-card,
+.news-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.panel-section {
+    padding: 16px 0 !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    border-radius: 0 !important;
+}
+.panel-section:last-child {
+    border-bottom: none !important;
+}
+
+.summary-card {
+    padding: 16px 0 !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    border-radius: 0 !important;
+}
+.summary-card:last-child {
+    border-bottom: none !important;
+}
+
+.coin-focus-card {
+    padding: 16px 0 24px 0 !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    border-radius: 0 !important;
+}
+
+.news-card {
+    padding: 16px 0 !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    border-radius: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.news-card:hover {
+    background: rgba(255, 255, 255, 0.015) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+body.light-theme .news-card:hover {
+    background: rgba(15, 23, 42, 0.015) !important;
+}
+
+/* Stat Card Minimal Adjustments */
+.stat-card {
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid var(--border-color) !important;
+}
+.stat-card::before {
+    display: none !important;
+}
+.stat-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    border-color: var(--accent-cyan) !important;
+}
+
+/* Options Analysis Card - subtle flat style */
+.options-analysis-card {
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+    border-radius: var(--radius-md) !important;
+}
+body.light-theme .options-analysis-card {
+    background: rgba(15, 23, 42, 0.02) !important;
+}
+
+/* Desktop Column Dividers */
+@media (min-width: 901px) {
+    .control-panel {
+        border-right: 1px solid var(--border-color) !important;
+        padding-right: 24px !important;
+    }
+    .summary-panel {
+        border-left: 1px solid var(--border-color) !important;
+        padding-left: 24px !important;
+    }
+}
+
+/* Mobile Spacing Optimizations */
+@media (max-width: 900px) {
+    .app-container {
+        padding: 12px 16px 100px 16px !important;
+    }
+    .app-header {
+        padding: 12px 16px !important;
+    }
+    
+    .control-panel {
+        border-right: none !important;
+        padding-right: 0 !important;
+    }
+    .summary-panel {
+        border-left: none !important;
+        padding-left: 0 !important;
+    }
+    
+    .news-card {
+        padding: 12px 0 !important;
+    }
+    .panel-section, 
+    .summary-card {
+        padding: 12px 0 !important;
+    }
+    .coin-focus-card {
+        padding: 12px 0 20px 0 !important;
+    }
+}
+
+/* Mobile Alerts Tab specific layout */
+body.show-tab-alerts .control-panel .alert-history-section {
+    display: block !important;
+}
+
+/* Watchlist Bar Styling */
+.watchlist-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 auto 16px auto;
+    width: 100%;
+    padding: 12px 0 !important;
+    background: transparent !important;
+    border-top: 1px solid var(--border-color) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    flex-wrap: wrap;
+}
+
+.watchlist-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.watchlist-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.watchlist-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.watchlist-filter-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-cyan);
+}
+
+.watchlist-filter-btn.active {
+    color: #eab308 !important;
+    border-color: rgba(234, 179, 8, 0.3) !important;
+    background: rgba(234, 179, 8, 0.05) !important;
+}
+
+/* Alert History Item styling */
+.alert-sidebar-item.history-item {
+    border-left: 3px solid var(--text-muted);
+    background: rgba(255, 255, 255, 0.01);
+}
+body.light-theme .alert-sidebar-item.history-item {
+    background: rgba(15, 23, 42, 0.01);
 }
 
 

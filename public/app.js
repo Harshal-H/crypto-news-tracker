@@ -7,7 +7,9 @@ const state = {
     summary: {},
     bookmarks: JSON.parse(localStorage.getItem('pulse_bookmarks') || '[]'),
     alerts: JSON.parse(localStorage.getItem('pulse_alerts') || '[]'),
-    watchlist: JSON.parse(localStorage.getItem('pulse_watchlist') || '[]'),
+    alertHistory: JSON.parse(localStorage.getItem('pulse_alert_history') || '[]'),
+    watchlists: JSON.parse(localStorage.getItem('pulse_watchlists') || '{"Default Watchlist": ["BTC", "ETH"]}'),
+    activeWatchlistName: localStorage.getItem('pulse_active_watchlist') || 'Default Watchlist',
     theme: localStorage.getItem('pulse_theme') || 'dark',
     chartDays: '1',
     filters: {
@@ -475,6 +477,100 @@ function setupEventListeners() {
             }
         });
     }
+
+    // Watchlist dropdown selection change
+    const watchlistSelect = document.getElementById('watchlist-select');
+    if (watchlistSelect) {
+        watchlistSelect.addEventListener('change', (e) => {
+            state.activeWatchlistName = e.target.value;
+            localStorage.setItem('pulse_active_watchlist', e.target.value);
+            renderAll();
+        });
+    }
+
+    // Create watchlist button
+    const createWatchlistBtn = document.getElementById('create-watchlist-btn');
+    if (createWatchlistBtn) {
+        createWatchlistBtn.addEventListener('click', () => {
+            const names = Object.keys(state.watchlists);
+            if (names.length >= 5) {
+                showToastAlert("Watchlist Limit", "You can have up to 5 watchlists.");
+                return;
+            }
+            
+            const name = prompt("Enter new watchlist name:");
+            if (!name || !name.trim()) return;
+            const cleanName = name.trim();
+            if (state.watchlists[cleanName]) {
+                showToastAlert("Error", "A watchlist with that name already exists.");
+                return;
+            }
+            
+            state.watchlists[cleanName] = [];
+            state.activeWatchlistName = cleanName;
+            localStorage.setItem('pulse_watchlists', JSON.stringify(state.watchlists));
+            localStorage.setItem('pulse_active_watchlist', cleanName);
+            
+            renderWatchlistManager();
+            renderAll();
+        });
+    }
+
+    // Rename watchlist button
+    const renameWatchlistBtn = document.getElementById('rename-watchlist-btn');
+    if (renameWatchlistBtn) {
+        renameWatchlistBtn.addEventListener('click', () => {
+            const currentName = state.activeWatchlistName;
+            const name = prompt("Enter new name for this watchlist:", currentName);
+            if (!name || !name.trim() || name.trim() === currentName) return;
+            const cleanName = name.trim();
+            if (state.watchlists[cleanName]) {
+                showToastAlert("Error", "A watchlist with that name already exists.");
+                return;
+            }
+            
+            state.watchlists[cleanName] = state.watchlists[currentName];
+            delete state.watchlists[currentName];
+            state.activeWatchlistName = cleanName;
+            
+            localStorage.setItem('pulse_watchlists', JSON.stringify(state.watchlists));
+            localStorage.setItem('pulse_active_watchlist', cleanName);
+            
+            renderWatchlistManager();
+            renderAll();
+        });
+    }
+
+    // Delete watchlist button
+    const deleteWatchlistBtn = document.getElementById('delete-watchlist-btn');
+    if (deleteWatchlistBtn) {
+        deleteWatchlistBtn.addEventListener('click', () => {
+            const currentName = state.activeWatchlistName;
+            if (!confirm(`Are you sure you want to delete the watchlist "${currentName}"?`)) return;
+            
+            delete state.watchlists[currentName];
+            
+            const remainingNames = Object.keys(state.watchlists);
+            if (remainingNames.length === 0) {
+                state.watchlists["Default Watchlist"] = [];
+                state.activeWatchlistName = "Default Watchlist";
+            } else {
+                state.activeWatchlistName = remainingNames[0];
+            }
+            
+            localStorage.setItem('pulse_watchlists', JSON.stringify(state.watchlists));
+            localStorage.setItem('pulse_active_watchlist', state.activeWatchlistName);
+            
+            renderWatchlistManager();
+            renderAll();
+        });
+    }
+
+    // Clear alert history button
+    const clearHistoryBtn = document.getElementById('clear-history-btn');
+    if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', clearAlertHistory);
+    }
 }
 
 // ==========================================================================
@@ -490,6 +586,8 @@ function renderAll() {
     renderInsightsAccordion();
     renderVolumeList();
     renderActiveAlertsSidebar();
+    renderAlertHistory();
+    renderWatchlistManager();
     
     // Update the Coin Focus Panel (default to BTC if "All" is active)
     const activeCoin = state.filters.coin === 'All' ? 'BTC' : state.filters.coin;
@@ -581,7 +679,8 @@ function renderStatsCards() {
     ];
     
     if (state.filters.showWatchlist) {
-        coins = coins.filter(coin => state.watchlist.includes(coin.symbol));
+        const activeWatchlist = state.watchlists[state.activeWatchlistName] || [];
+        coins = coins.filter(coin => activeWatchlist.includes(coin.symbol));
     }
     
     if (coins.length === 0) {
@@ -608,7 +707,8 @@ function renderStatsCards() {
         const strokeColor = isPos ? '#10b981' : '#f43f5e';
         const fillGradId = `spark-grad-${coin.symbol}`;
         
-        const isStarred = state.watchlist.includes(coin.symbol);
+        const activeWatchlist = state.watchlists[state.activeWatchlistName] || [];
+        const isStarred = activeWatchlist.includes(coin.symbol);
         const starIconHtml = isStarred ? `<span class="watchlist-star-badge" title="In Watchlist"><i data-lucide="star" style="width: 12px; height: 12px; fill: #eab308; stroke: #eab308;"></i></span>` : '';
         
         let sentimentBadgeHtml = '';
@@ -703,7 +803,8 @@ function renderNewsFeed() {
         
         // Watchlist filter focus
         if (state.filters.showWatchlist) {
-            filtered = filtered.filter(a => a.tags.some(tag => state.watchlist.includes(tag)));
+            const activeWatchlist = state.watchlists[state.activeWatchlistName] || [];
+            filtered = filtered.filter(a => a.tags.some(tag => activeWatchlist.includes(tag)));
         }
         
         // News Age Limit Filter
@@ -1256,7 +1357,8 @@ function renderFocusCardContent(symbol, pricesData) {
     
     const sliderPercentage = 50 + score / 2;
     
-    const isStarred = state.watchlist.includes(symbol);
+    const activeWatchlist = state.watchlists[state.activeWatchlistName] || [];
+    const isStarred = activeWatchlist.includes(symbol);
     const starClass = isStarred ? 'active' : '';
     
     container.innerHTML = `
@@ -1405,13 +1507,18 @@ function renderFocusCardContent(symbol, pricesData) {
     const starBtn = document.getElementById('watchlist-star-btn');
     if (starBtn) {
         starBtn.addEventListener('click', () => {
-            const isStarred = state.watchlist.includes(symbol);
+            let activeList = state.watchlists[state.activeWatchlistName] || [];
+            const isStarred = activeList.includes(symbol);
             if (isStarred) {
-                state.watchlist = state.watchlist.filter(s => s !== symbol);
+                activeList = activeList.filter(s => s !== symbol);
             } else {
-                state.watchlist.push(symbol);
+                activeList.push(symbol);
             }
-            localStorage.setItem('pulse_watchlist', JSON.stringify(state.watchlist));
+            state.watchlists[state.activeWatchlistName] = activeList;
+            localStorage.setItem('pulse_watchlists', JSON.stringify(state.watchlists));
+            
+            // Re-render watchlist manager to update counts
+            renderWatchlistManager();
             
             starBtn.classList.toggle('active', !isStarred);
             const icon = starBtn.querySelector('i');
@@ -1875,6 +1982,17 @@ async function checkPriceAlerts() {
             const { alert, currentPrice } = item;
             const message = `${alert.symbol} crossed ${alert.direction} $${alert.price.toLocaleString()} (Current: $${currentPrice.toLocaleString()})`;
             
+            // Log to alert history
+            const historyItem = {
+                id: 'hist-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+                symbol: alert.symbol,
+                direction: alert.direction,
+                price: alert.price,
+                triggeredPrice: currentPrice,
+                timestamp: new Date().toISOString()
+            };
+            state.alertHistory.unshift(historyItem);
+            
             const isBrowser = alert.channels ? alert.channels.browser : true;
             const isEmail = alert.channels ? alert.channels.email : !!alert.email;
             
@@ -1914,6 +2032,13 @@ async function checkPriceAlerts() {
                 }
             }
         }
+        
+        // Save alert history (max 100 items)
+        if (state.alertHistory.length > 100) {
+            state.alertHistory = state.alertHistory.slice(0, 100);
+        }
+        localStorage.setItem('pulse_alert_history', JSON.stringify(state.alertHistory));
+        renderAlertHistory();
     }
 }
 
@@ -2152,5 +2277,73 @@ function updateLiveUI(symbol, price, change, volume) {
             focusChange.className = `focus-change-val ${isPos ? 'pos' : 'neg'}`;
         }
     }
+}
+
+// ==========================================================================
+// Alert History & Watchlist Manager Helpers
+// ==========================================================================
+function renderAlertHistory() {
+    const container = document.getElementById('alert-history-list');
+    const clearBtn = document.getElementById('clear-history-btn');
+    if (!container) return;
+    
+    if (state.alertHistory.length === 0) {
+        container.innerHTML = '<span class="no-alerts-label">No alert history</span>';
+        if (clearBtn) clearBtn.style.display = 'none';
+        return;
+    }
+    
+    if (clearBtn) clearBtn.style.display = 'block';
+    
+    let html = '';
+    state.alertHistory.forEach(item => {
+        const directionSymbol = item.direction === 'above' ? '▲' : '▼';
+        const directionClass = item.direction;
+        const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        html += `
+            <div class="alert-sidebar-item history-item" id="${item.id}">
+                <div class="alert-sidebar-info">
+                    <div>
+                        <span class="alert-coin-badge">${item.symbol}</span>
+                        <span class="alert-condition ${directionClass}">${directionSymbol} $${item.price.toLocaleString()}</span>
+                    </div>
+                    <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span>Exec: $${item.triggeredPrice.toLocaleString()}</span>
+                        <span>${timeStr}</span>
+                    </div>
+                </div>
+                <button class="alert-delete-btn" onclick="removeHistoryAlert('${item.id}')" title="Delete History Entry">
+                    <i data-lucide="x" style="width:12px; height:12px;"></i>
+                </button>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    lucide.createIcons();
+}
+
+function removeHistoryAlert(id) {
+    state.alertHistory = state.alertHistory.filter(item => item.id !== id);
+    localStorage.setItem('pulse_alert_history', JSON.stringify(state.alertHistory));
+    renderAlertHistory();
+}
+
+function clearAlertHistory() {
+    if (!confirm("Are you sure you want to clear all alert history?")) return;
+    state.alertHistory = [];
+    localStorage.setItem('pulse_alert_history', JSON.stringify(state.alertHistory));
+    renderAlertHistory();
+}
+
+function renderWatchlistManager() {
+    const select = document.getElementById('watchlist-select');
+    if (!select) return;
+    
+    const names = Object.keys(state.watchlists);
+    select.innerHTML = names.map(name => `
+        <option value="${name}" ${name === state.activeWatchlistName ? 'selected' : ''}>${name} (${state.watchlists[name].length})</option>
+    `).join('');
 }
 

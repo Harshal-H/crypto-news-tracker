@@ -61,6 +61,27 @@
             </div>
             <div class="coin-search-results" id="coin-search-results"></div>
         </div>
+
+        <!-- Watchlist Management Bar -->
+        <div class="watchlist-bar" id="watchlist-bar">
+            <div class="watchlist-controls">
+                <span class="watchlist-label">Watchlist:</span>
+                <select id="watchlist-select" class="focus-coin-select">
+                    <!-- Loaded dynamically -->
+                </select>
+                <button id="create-watchlist-btn" class="tag-btn" title="Create watchlist">+ New</button>
+                <button id="rename-watchlist-btn" class="icon-btn" title="Rename watchlist">
+                    <i data-lucide="edit-3"></i>
+                </button>
+                <button id="delete-watchlist-btn" class="icon-btn" title="Delete watchlist">
+                    <i data-lucide="trash-2"></i>
+                </button>
+            </div>
+            <button id="watchlist-filter-btn" class="watchlist-filter-btn" title="Filter feed by watchlist">
+                <span>Filter Feed by Watchlist</span>
+                <i data-lucide="star"></i>
+            </button>
+        </div>
         <!-- Live Market Stats Cards -->
         <section class="stats-grid" id="stats-container">
             <!-- Populated via JS (BTC, ETH, SOL, XRP, ADA cards) -->
@@ -97,12 +118,6 @@
                             <i data-lucide="search"></i>
                             <input type="text" id="search-input" placeholder="Search headlines, events...">
                         </div>
-                        
-                        <!-- Watchlist Toggle Focus -->
-                        <button id="watchlist-filter-btn" class="watchlist-filter-btn" title="Filter to watchlisted coins">
-                            <span>Watchlist Only</span>
-                            <i data-lucide="star"></i>
-                        </button>
                     </div>
 
                     <div class="panel-section filter-section">
@@ -149,6 +164,16 @@
                         <h3>Price Alerts</h3>
                         <div class="active-alerts-list" id="active-alerts-list">
                             <span class="no-alerts-label">No active price alerts</span>
+                        </div>
+                    </div>
+
+                    <div class="panel-section alert-history-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 style="margin-bottom: 0;">Alert History</h3>
+                            <button id="clear-history-btn" class="tag-btn" style="padding: 2px 8px; font-size: 0.7rem; display: none;">Clear All</button>
+                        </div>
+                        <div class="alert-history-list" id="alert-history-list">
+                            <span class="no-alerts-label">No alert history</span>
                         </div>
                     </div>
                 </div>
