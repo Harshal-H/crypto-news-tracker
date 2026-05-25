@@ -165,6 +165,7 @@ async function refreshData() {
 function setupEventListeners() {
     setupMobileTabs();
     
+
     // Theme Toggle
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     if (themeToggleBtn) {
@@ -248,14 +249,11 @@ function setupEventListeners() {
         });
     }
     
-    // Watchlist Focus Button
-    const watchlistFilterBtn = document.getElementById('watchlist-filter-btn');
-    if (watchlistFilterBtn) {
-        watchlistFilterBtn.value = state.filters.showWatchlist;
-        watchlistFilterBtn.classList.toggle('active', state.filters.showWatchlist);
-        watchlistFilterBtn.addEventListener('click', () => {
-            state.filters.showWatchlist = !state.filters.showWatchlist;
-            watchlistFilterBtn.classList.toggle('active', state.filters.showWatchlist);
+    // Exit Watchlist Filter Button
+    const exitWatchlistBtn = document.getElementById('exit-watchlist-btn');
+    if (exitWatchlistBtn) {
+        exitWatchlistBtn.addEventListener('click', () => {
+            state.filters.showWatchlist = false;
             renderAll();
         });
     }
@@ -436,13 +434,24 @@ function setupEventListeners() {
             });
             
             if (matches.length > 0) {
-                coinSearchResults.innerHTML = matches.map(m => `
-                    <div class="coin-search-item" data-coin="${m.symbol}">
-                        <span class="coin-search-symbol">${m.symbol}</span>
-                        <span class="coin-search-name">${m.name}</span>
-                    </div>
-                `).join('');
+                coinSearchResults.innerHTML = matches.map(m => {
+                    const inActiveWatchlist = (state.watchlists[state.activeWatchlistName] || []).includes(m.symbol);
+                    const inAnyWatchlist = Object.values(state.watchlists).some(list => list.includes(m.symbol));
+                    let starIconHtml = '';
+                    if (inActiveWatchlist) {
+                        starIconHtml = `<i data-lucide="star" style="width: 11px; height: 11px; fill: #eab308; stroke: #eab308; margin-left: 4px; display: inline-block; vertical-align: middle;"></i>`;
+                    } else if (inAnyWatchlist) {
+                        starIconHtml = `<i data-lucide="star" style="width: 11px; height: 11px; stroke: #eab308; margin-left: 4px; display: inline-block; vertical-align: middle;"></i>`;
+                    }
+                    return `
+                        <div class="coin-search-item" data-coin="${m.symbol}">
+                            <span class="coin-search-symbol">${m.symbol} ${starIconHtml}</span>
+                            <span class="coin-search-name">${m.name}</span>
+                        </div>
+                    `;
+                }).join('');
                 coinSearchResults.style.display = 'block';
+                lucide.createIcons();
             } else {
                 coinSearchResults.innerHTML = `<div style="padding: 10px 14px; font-size: 0.85rem; color: var(--text-muted);">No matches found</div>`;
                 coinSearchResults.style.display = 'block';
@@ -484,6 +493,7 @@ function setupEventListeners() {
         watchlistSelect.addEventListener('change', (e) => {
             state.activeWatchlistName = e.target.value;
             localStorage.setItem('pulse_active_watchlist', e.target.value);
+            state.filters.showWatchlist = true;
             renderAll();
         });
     }
@@ -577,6 +587,18 @@ function setupEventListeners() {
 // Rendering Engine
 // ==========================================================================
 function renderAll() {
+    // Restore standard filters view visibility in Crypto Mode
+    const filtersView = document.getElementById('sidebar-filters-view');
+    if (filtersView) {
+        const sidebarFiltersTab = document.querySelector('.sidebar-tab-btn[data-sidebar-tab="tab-filters"]');
+        if (!sidebarFiltersTab || sidebarFiltersTab.classList.contains('active')) {
+            filtersView.style.display = 'block';
+        } else {
+            filtersView.style.display = 'none';
+        }
+    }
+    
+    // Render Crypto elements
     renderTicker();
     renderStatsCards();
     renderNewsFeed();
@@ -707,9 +729,15 @@ function renderStatsCards() {
         const strokeColor = isPos ? '#10b981' : '#f43f5e';
         const fillGradId = `spark-grad-${coin.symbol}`;
         
-        const activeWatchlist = state.watchlists[state.activeWatchlistName] || [];
-        const isStarred = activeWatchlist.includes(coin.symbol);
-        const starIconHtml = isStarred ? `<span class="watchlist-star-badge" title="In Watchlist"><i data-lucide="star" style="width: 12px; height: 12px; fill: #eab308; stroke: #eab308;"></i></span>` : '';
+        const inActiveWatchlist = (state.watchlists[state.activeWatchlistName] || []).includes(coin.symbol);
+        const inAnyWatchlist = Object.values(state.watchlists).some(list => list.includes(coin.symbol));
+        
+        let starIconHtml = '';
+        if (inActiveWatchlist) {
+            starIconHtml = `<span class="watchlist-star-badge" title="In Active Watchlist"><i data-lucide="star" style="width: 12px; height: 12px; fill: #eab308; stroke: #eab308;"></i></span>`;
+        } else if (inAnyWatchlist) {
+            starIconHtml = `<span class="watchlist-star-badge" title="In Other Watchlist"><i data-lucide="star" style="width: 12px; height: 12px; stroke: #eab308;"></i></span>`;
+        }
         
         let sentimentBadgeHtml = '';
         if (state.summary.coinInsights && state.summary.coinInsights[coin.symbol]) {
@@ -1268,22 +1296,23 @@ async function triggerCoinFocusUpdate(symbol) {
     if (!container) return;
     container.style.display = 'flex';
     
-    const coinId = coinIdMapping[symbol];
-    if (!coinId) return;
-    
     // Show loading skeleton if the coin selection or timeframe changes
     const cacheKey = symbol + '_' + state.chartDays;
     if (lastFetchedFocusSymbol !== cacheKey) {
+        let nameText = coinNameMapping[symbol] || symbol;
         container.innerHTML = `
             <div class="focus-loading">
                 <div class="pulse-dot"></div>
-                Fetching historical price and options trends for ${coinNameMapping[symbol]}...
+                Fetching historical prices and financials for ${nameText}...
             </div>
         `;
         lastFetchedFocusSymbol = cacheKey;
     }
     
     try {
+        const coinId = coinIdMapping[symbol];
+        if (!coinId) return;
+        
         const response = await fetch(`/api/historical?coin=${coinId}&days=${state.chartDays}`);
         const prices = await response.json();
         
@@ -1361,10 +1390,17 @@ function renderFocusCardContent(symbol, pricesData) {
     const isStarred = activeWatchlist.includes(symbol);
     const starClass = isStarred ? 'active' : '';
     
+    const containingWatchlists = Object.keys(state.watchlists).filter(name => state.watchlists[name].includes(symbol));
+    const watchlistTagsHtml = containingWatchlists.map(name => `
+        <span class="watchlist-tag" style="font-size: 0.6rem; padding: 2px 6px; background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 10px; font-family: var(--font-body); font-weight: 600;">
+            ${name}
+        </span>
+    `).join('');
+    
     container.innerHTML = `
         <div class="focus-header">
             <div class="focus-coin-info">
-                <h3 style="display: flex; align-items: center; gap: 8px;">
+                <h3 style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
                     <select id="focus-coin-select" class="focus-coin-select" style="font-size: 1.05rem; font-family: var(--font-heading); font-weight: 700; padding: 4px 10px;">
                         <option value="BTC" ${symbol === 'BTC' ? 'selected' : ''}>Bitcoin (BTC)</option>
                         <option value="ETH" ${symbol === 'ETH' ? 'selected' : ''}>Ethereum (ETH)</option>
@@ -1375,20 +1411,25 @@ function renderFocusCardContent(symbol, pricesData) {
                     <button class="bell-btn" id="bell-alert-btn" title="Set Price Alert" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
                         <i data-lucide="bell" style="width: 14px; height: 14px;"></i>
                     </button>
-                    <button class="star-btn ${starClass}" id="watchlist-star-btn" title="Toggle Watchlist" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
+                    <button class="star-btn ${starClass}" id="watchlist-star-btn" title="Toggle Active Watchlist" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
                         <i data-lucide="star" style="width: 14px; height: 14px; ${isStarred ? 'fill:#eab308;' : ''}"></i>
                     </button>
+                    <select id="add-to-watchlist-select" class="focus-coin-select" style="font-size: 0.72rem; padding: 2px 6px; height: 28px; border-radius: var(--radius-sm); font-family: var(--font-heading); font-weight: 600; cursor: pointer; border-color: var(--border-color);">
+                        <option value="" disabled selected>+ Watchlist</option>
+                        ${Object.keys(state.watchlists).map(name => {
+                            const hasCoin = state.watchlists[name].includes(symbol);
+                            return `<option value="${name}">${hasCoin ? '✓' : '+'} ${name}</option>`;
+                        }).join('')}
+                    </select>
+                    ${watchlistTagsHtml}
                 </h3>
-                <div class="focus-price-container">
+                <div class="focus-price-container" style="margin-top: 4px;">
                     <span class="focus-price focus-price-val">$${priceText}</span>
                     <span class="focus-change focus-change-val ${changeClass}">${changeText}</span>
                 </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center;">
                 <span class="ai-badge"><i data-lucide="sparkles"></i> Options Advisor</span>
-                <button class="icon-btn mobile-only" id="coin-focus-close-btn" title="Close Panel" style="padding: 4px;">
-                    <i data-lucide="x"></i>
-                </button>
             </div>
         </div>
 
@@ -1467,7 +1508,7 @@ function renderFocusCardContent(symbol, pricesData) {
         <!-- Option Trading Trend Section -->
         <div class="options-section">
             <div class="options-title-bar">
-                <h4><i data-lucide="trending-up" style="width:16px; height:16px; color:var(--accent-cyan)"></i> Option Trading Recommendation</h4>
+                <h4><i data-lucide="trending-up" style="width:16px; height:16px; color:var(--accent-cyan)"></i> Option Recommendation</h4>
                 <span class="options-badge ${badgeClass}">${label}</span>
             </div>
             
@@ -1475,19 +1516,17 @@ function renderFocusCardContent(symbol, pricesData) {
                 <div class="trend-slider-track">
                     <div class="trend-slider-marker" style="left: ${sliderPercentage}%;"></div>
                 </div>
-                <div class="trend-slider-labels">
-                    <span>Strong Put</span>
-                    <span>Put</span>
+                <div class="trend-slider-labels" style="font-size: 0.62rem;">
+                    <span>Put Option</span>
                     <span>Hold</span>
-                    <span>Call</span>
-                    <span>Strong Call</span>
+                    <span>Call Option</span>
                 </div>
             </div>
             
             <div class="options-analysis-card">
-                <p><strong>Outlook:</strong> ${analysisMsg}</p>
-                <p style="margin-top: 6px; font-size: 0.7rem; color:var(--text-muted);">
-                    Indicators Summary: Technical Momentum weight (60%) + Aggregated Sentiment weight (40%). Analysis Confidence: <strong>${confidence}%</strong>.
+                <p>${analysisMsg}</p>
+                <p style="margin-top: 6px; font-size: 0.65rem; color:var(--text-muted);">
+                    Confidence: <strong>${confidence}%</strong> | Weighted Momentum & Sentiment.
                 </p>
             </div>
         </div>
@@ -1533,11 +1572,35 @@ function renderFocusCardContent(symbol, pricesData) {
         });
     }
     
-    // Close Mobile Coin Drawer
-    const closeBtn = document.getElementById('coin-focus-close-btn');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            document.body.classList.remove('coin-details-open');
+    // Add to specific watchlist selector
+    const addToWatchlistSelect = document.getElementById('add-to-watchlist-select');
+    if (addToWatchlistSelect) {
+        addToWatchlistSelect.addEventListener('change', (e) => {
+            const watchlistName = e.target.value;
+            if (!watchlistName) return;
+            
+            let list = state.watchlists[watchlistName] || [];
+            const hasCoin = list.includes(symbol);
+            if (hasCoin) {
+                list = list.filter(s => s !== symbol);
+                showToastAlert("Watchlist Update", `${symbol} removed from ${watchlistName}`);
+            } else {
+                list.push(symbol);
+                showToastAlert("Watchlist Update", `${symbol} added to ${watchlistName}`);
+            }
+            state.watchlists[watchlistName] = list;
+            localStorage.setItem('pulse_watchlists', JSON.stringify(state.watchlists));
+            
+            // Reset select dropdown element to default choice
+            addToWatchlistSelect.value = "";
+            
+            // Re-render
+            renderWatchlistManager();
+            renderStatsCards();
+            renderFocusCard(symbol);
+            if (state.filters.showWatchlist) {
+                renderNewsFeed();
+            }
         });
     }
     
@@ -1802,6 +1865,7 @@ function setupChartHoverHandlers(pricesData, symbol) {
     chartWrapper.addEventListener('mouseleave', hideHoverElements);
 }
 
+
 function renderVolumeList() {
     const container = document.getElementById('coin-volume-list');
     if (!container || !state.prices) return;
@@ -1852,11 +1916,21 @@ function renderVolumeList() {
         const ratio = maxVolume > 0 ? (vol / maxVolume) * 100 : 0;
         const barWidth = Math.max(5, ratio); // at least 5% bar
         
+        // Watchlist marks
+        const inActiveWatchlist = (state.watchlists[state.activeWatchlistName] || []).includes(coin.symbol);
+        const inAnyWatchlist = Object.values(state.watchlists).some(list => list.includes(coin.symbol));
+        let starIconHtml = '';
+        if (inActiveWatchlist) {
+            starIconHtml = `<i data-lucide="star" style="width: 11px; height: 11px; fill: #eab308; stroke: #eab308; margin-left: 4px; display: inline-block; vertical-align: middle;"></i>`;
+        } else if (inAnyWatchlist) {
+            starIconHtml = `<i data-lucide="star" style="width: 11px; height: 11px; stroke: #eab308; margin-left: 4px; display: inline-block; vertical-align: middle;"></i>`;
+        }
+        
         html += `
             <div class="volume-item ${activeClass}" data-coin="${coin.symbol}">
                 <div class="volume-info-row">
                     <div>
-                        <span class="volume-coin-symbol">${coin.symbol}</span>
+                        <span class="volume-coin-symbol">${coin.symbol} ${starIconHtml}</span>
                         <span class="volume-coin-name">${coin.name}</span>
                     </div>
                     <span class="volume-value">${formattedVol}</span>
@@ -2342,8 +2416,16 @@ function renderWatchlistManager() {
     if (!select) return;
     
     const names = Object.keys(state.watchlists);
-    select.innerHTML = names.map(name => `
-        <option value="${name}" ${name === state.activeWatchlistName ? 'selected' : ''}>${name} (${state.watchlists[name].length})</option>
+    let html = `<option value="" disabled ${!state.filters.showWatchlist ? 'selected' : ''}>Select Watchlist...</option>`;
+    html += names.map(name => `
+        <option value="${name}" ${state.filters.showWatchlist && name === state.activeWatchlistName ? 'selected' : ''}>${name} (${state.watchlists[name].length})</option>
     `).join('');
+    
+    select.innerHTML = html;
+
+    const exitWatchlistBtn = document.getElementById('exit-watchlist-btn');
+    if (exitWatchlistBtn) {
+        exitWatchlistBtn.style.display = state.filters.showWatchlist ? 'inline-flex' : 'none';
+    }
 }
 

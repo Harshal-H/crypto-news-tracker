@@ -62,6 +62,8 @@ COIN_TAGS = {
     'ADA': ['cardano', 'ada']
 }
 
+
+
 def clean_html(raw_html):
     """Clean HTML tags and double spaces from RSS summaries."""
     if not raw_html:

@@ -29,8 +29,8 @@
 
     <!-- Main Navigation / Header -->
     <header class="app-header">
-        <div class="header-logo-container" style="display: flex; align-items: center; gap: 8px;">
-            <button id="filter-drawer-toggle" class="icon-btn mobile-only-btn" title="Toggle Filters" style="margin-right: 4px;">
+        <div class="header-logo-container">
+            <button id="filter-drawer-toggle" class="icon-btn mobile-only-btn" title="Toggle Filters">
                 <i data-lucide="menu"></i>
             </button>
             <div class="header-logo">
@@ -77,9 +77,9 @@
                     <i data-lucide="trash-2"></i>
                 </button>
             </div>
-            <button id="watchlist-filter-btn" class="watchlist-filter-btn" title="Filter feed by watchlist">
-                <span>Filter Feed by Watchlist</span>
-                <i data-lucide="star"></i>
+            <button id="exit-watchlist-btn" class="watchlist-filter-btn" title="Exit Watchlist View" style="display: none; color: var(--bearish); border-color: rgba(244, 63, 94, 0.3); background: rgba(244, 63, 94, 0.05);">
+                <span>Exit Watchlist</span>
+                <i data-lucide="x"></i>
             </button>
         </div>
         <!-- Live Market Stats Cards -->
@@ -98,11 +98,13 @@
             <aside class="control-panel">
                 <!-- Mobile Drawer Header -->
                 <div class="control-panel-header mobile-only">
-                    <h3>Navigation</h3>
+                    <h3>Filters</h3>
                     <button id="drawer-close-btn" class="icon-btn">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
+
+
                 
                 <!-- Desktop Sidebar Tab Switcher -->
                 <div class="sidebar-tabs desktop-only-flex" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; width: 100%;">
@@ -183,11 +185,15 @@
                     <div class="panel-section settings-section">
                         <h3>App Customization</h3>
                         
-                        <div class="setting-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                        <div class="setting-item" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                             <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">Background Theme:</span>
-                            <div class="theme-select-row" style="display: flex; gap: 8px;">
-                                <button id="theme-btn-dark" class="source-btn active" style="flex: 1; padding: 10px 0;">Dark Mode</button>
-                                <button id="theme-btn-light" class="source-btn" style="flex: 1; padding: 10px 0;">Light Mode</button>
+                            <div class="theme-toggle-pill">
+                                <button id="theme-btn-dark" class="theme-pill-btn" title="Dark Mode">
+                                    <i data-lucide="moon"></i>
+                                </button>
+                                <button id="theme-btn-light" class="theme-pill-btn" title="Light Mode">
+                                    <i data-lucide="sun"></i>
+                                </button>
                             </div>
                         </div>
                         
@@ -202,6 +208,8 @@
                         </div>
                     </div>
                 </div>
+
+
             </aside>
 
             <!-- Center Panel: News Feed Stream -->
