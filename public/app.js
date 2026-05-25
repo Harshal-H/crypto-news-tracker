@@ -7,15 +7,30 @@ const state = {
     summary: {},
     bookmarks: JSON.parse(localStorage.getItem('pulse_bookmarks') || '[]'),
     alerts: JSON.parse(localStorage.getItem('pulse_alerts') || '[]'),
+    watchlist: JSON.parse(localStorage.getItem('pulse_watchlist') || '[]'),
+    theme: localStorage.getItem('pulse_theme') || 'dark',
     chartDays: '1',
     filters: {
         coin: 'All',
         source: 'All',
         sentiment: 'All',
         search: '',
-        showBookmarks: false
+        showBookmarks: false,
+        showWatchlist: false,
+        maxAgeDays: parseInt(localStorage.getItem('pulse_max_age') || '31')
     }
 };
+
+function formatCoinPrice(price, symbol) {
+    const val = parseFloat(price);
+    if (isNaN(val)) return '0.00';
+    const isLowPriced = val < 10 || symbol === 'ADA' || symbol === 'XRP' || symbol === 'cardano' || symbol === 'ripple';
+    const decimals = isLowPriced ? 4 : 2;
+    return val.toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+}
 
 const coinIdMapping = {
     'BTC': 'bitcoin',
@@ -52,10 +67,27 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initApp() {
+    applyTheme(state.theme);
     updateBookmarkBadge();
     requestNotificationPermission();
     fetchData();
     initLiveWebSocket();
+}
+
+function applyTheme(theme) {
+    state.theme = theme;
+    localStorage.setItem('pulse_theme', theme);
+    if (theme === 'light') {
+        document.body.classList.add('light-theme');
+    } else {
+        document.body.classList.remove('light-theme');
+    }
+    const desktopIcon = document.getElementById('theme-icon-desktop');
+    if (desktopIcon) {
+        desktopIcon.className = theme === 'light' ? 'lucide lucide-moon' : 'lucide lucide-sun';
+        desktopIcon.setAttribute('data-lucide', theme === 'light' ? 'moon' : 'sun');
+    }
+    lucide.createIcons();
 }
 
 async function fetchData() {
@@ -83,6 +115,9 @@ async function refreshData() {
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) refreshBtn.classList.add('spinning');
     
+    const layout = document.querySelector('.dashboard-layout');
+    if (layout) layout.classList.add('refreshing');
+    
     try {
         const [newsRes, pricesRes, summaryRes] = await Promise.all([
             fetch('/api/news').then(r => r.json()),
@@ -102,6 +137,9 @@ async function refreshData() {
         if (refreshBtn) {
             setTimeout(() => refreshBtn.classList.remove('spinning'), 500);
         }
+        if (layout) {
+            setTimeout(() => layout.classList.remove('refreshing'), 500);
+        }
     }
 }
 
@@ -111,12 +149,81 @@ async function refreshData() {
 function setupEventListeners() {
     setupMobileTabs();
     
+    // Theme Toggle
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', () => {
+            const newTheme = state.theme === 'light' ? 'dark' : 'light';
+            applyTheme(newTheme);
+        });
+    }
+    
+    // Drawer Hamburger Toggle
+    const filterDrawerToggle = document.getElementById('filter-drawer-toggle');
+    if (filterDrawerToggle) {
+        filterDrawerToggle.addEventListener('click', () => {
+            document.body.classList.toggle('drawer-open');
+        });
+    }
+    
+    // Close Drawer Buttons
+    const drawerCloseBtn = document.getElementById('drawer-close-btn');
+    if (drawerCloseBtn) {
+        drawerCloseBtn.addEventListener('click', () => {
+            document.body.classList.remove('drawer-open');
+        });
+    }
+    
+    // Drawer Overlay Backdrop
+    const drawerOverlay = document.getElementById('drawer-overlay');
+    if (drawerOverlay) {
+        drawerOverlay.addEventListener('click', () => {
+            document.body.classList.remove('drawer-open');
+        });
+    }
+    
+    // Coin Details Overlay Backdrop
+    const coinDetailsOverlay = document.getElementById('coin-details-overlay');
+    if (coinDetailsOverlay) {
+        coinDetailsOverlay.addEventListener('click', () => {
+            document.body.classList.remove('coin-details-open');
+        });
+    }
+    
     // Search filter input
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
             state.filters.search = e.target.value.toLowerCase().trim();
             renderNewsFeed();
+        });
+    }
+    
+    // News Age Range Slider
+    const newsAgeSlider = document.getElementById('news-age-slider');
+    const newsAgeVal = document.getElementById('news-age-val');
+    if (newsAgeSlider && newsAgeVal) {
+        newsAgeSlider.value = state.filters.maxAgeDays;
+        newsAgeVal.innerText = state.filters.maxAgeDays === 31 ? 'All News' : `Last ${state.filters.maxAgeDays} Days`;
+        
+        newsAgeSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            state.filters.maxAgeDays = val;
+            localStorage.setItem('pulse_max_age', val);
+            newsAgeVal.innerText = val === 31 ? 'All News' : `Last ${val} Days`;
+            renderNewsFeed();
+        });
+    }
+    
+    // Watchlist Focus Button
+    const watchlistFilterBtn = document.getElementById('watchlist-filter-btn');
+    if (watchlistFilterBtn) {
+        watchlistFilterBtn.value = state.filters.showWatchlist;
+        watchlistFilterBtn.classList.toggle('active', state.filters.showWatchlist);
+        watchlistFilterBtn.addEventListener('click', () => {
+            state.filters.showWatchlist = !state.filters.showWatchlist;
+            watchlistFilterBtn.classList.toggle('active', state.filters.showWatchlist);
+            renderAll();
         });
     }
     
@@ -181,15 +288,12 @@ function setupEventListeners() {
             state.filters.showBookmarks = !state.filters.showBookmarks;
             bookmarkToggleBtn.classList.toggle('active', state.filters.showBookmarks);
             
-            // If showing bookmarks, deactivate tag filters visually
             if (state.filters.showBookmarks) {
-                document.querySelectorAll('.tag-btn, .source-btn, .sentiment-filter-btn').forEach(b => {
+                document.querySelectorAll('.source-btn, .sentiment-filter-btn').forEach(b => {
                     b.classList.remove('active');
                 });
-                document.querySelector('[data-coin="All"]').classList.add('active');
                 document.querySelector('[data-source="All"]').classList.add('active');
                 document.querySelector('[data-sent="All"]').classList.add('active');
-                state.filters.coin = 'All';
                 state.filters.source = 'All';
                 state.filters.sentiment = 'All';
             }
@@ -210,9 +314,12 @@ function setupEventListeners() {
         });
     }
     
-    // ESC key to close modal
+    // ESC key to close modal/drawers
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeModal();
+        if (e.key === 'Escape') {
+            closeModal();
+            document.body.classList.remove('drawer-open', 'coin-details-open');
+        }
     });
 }
 
@@ -284,7 +391,7 @@ function renderTicker() {
         let itemsHtml = '';
         for (const [key, details] of Object.entries(state.prices)) {
             const sym = coinMapping[key] || key.toUpperCase();
-            const price = parseFloat(details.usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const price = formatCoinPrice(details.usd, sym);
             const change = parseFloat(details.usd_24h_change || 0);
             const isPos = change >= 0;
             const changeIcon = isPos ? '▲' : '▼';
@@ -311,7 +418,7 @@ function renderStatsCards() {
     const container = document.getElementById('stats-container');
     if (!container) return;
     
-    const coins = [
+    let coins = [
         { id: 'bitcoin', name: 'Bitcoin', symbol: 'BTC' },
         { id: 'ethereum', name: 'Ethereum', symbol: 'ETH' },
         { id: 'solana', name: 'Solana', symbol: 'SOL' },
@@ -319,30 +426,54 @@ function renderStatsCards() {
         { id: 'cardano', name: 'Cardano', symbol: 'ADA' }
     ];
     
+    if (state.filters.showWatchlist) {
+        coins = coins.filter(coin => state.watchlist.includes(coin.symbol));
+    }
+    
+    if (coins.length === 0) {
+        container.innerHTML = `
+            <div class="empty-watchlist-msg" style="grid-column: 1 / -1; text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.85rem; border: 1px dashed var(--border-color); border-radius: var(--radius-md); width: 100%;">
+                <i data-lucide="star" style="width: 16px; height: 16px; margin-bottom: 4px; vertical-align: middle;"></i> Watchlist is empty. Star coins to add them.
+            </div>
+        `;
+        lucide.createIcons();
+        return;
+    }
+    
     let html = '';
     
     coins.forEach(coin => {
         const details = state.prices[coin.id] || { usd: 0, usd_24h_change: 0 };
-        const price = parseFloat(details.usd).toLocaleString('en-US', { 
-            minimumFractionDigits: coin.id === 'cardano' ? 4 : 2, 
-            maximumFractionDigits: coin.id === 'cardano' ? 4 : 2 
-        });
+        const price = formatCoinPrice(details.usd, coin.symbol);
         const change = parseFloat(details.usd_24h_change || 0);
         const isPos = change >= 0;
         const changeClass = isPos ? 'pos' : 'neg';
         const changeText = (isPos ? '+' : '') + change.toFixed(2) + '%';
         
-        // Generate a beautiful aesthetic SVG sparkline based on 24h performance
         const sparklinePath = generateSparkline(isPos);
         const strokeColor = isPos ? '#10b981' : '#f43f5e';
         const fillGradId = `spark-grad-${coin.symbol}`;
         
+        const isStarred = state.watchlist.includes(coin.symbol);
+        const starIconHtml = isStarred ? `<span class="watchlist-star-badge" title="In Watchlist"><i data-lucide="star" style="width: 12px; height: 12px; fill: #eab308; stroke: #eab308;"></i></span>` : '';
+        
+        let sentimentBadgeHtml = '';
+        if (state.summary.coinInsights && state.summary.coinInsights[coin.symbol]) {
+            const sent = state.summary.coinInsights[coin.symbol].sentiment;
+            const sentClass = sent.toLowerCase();
+            sentimentBadgeHtml = `<span class="mini-sentiment-badge ${sentClass}" style="font-size: 0.55rem; font-weight: 700; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: ${sent === 'Bullish' ? 'var(--bullish)' : sent === 'Bearish' ? 'var(--bearish)' : 'var(--neutral)'}">${sent}</span>`;
+        }
+        
         html += `
-            <div class="stat-card" data-coin-card="${coin.symbol}" onclick="filterByCoin('${coin.symbol}')">
+            <div class="stat-card ${state.filters.coin === coin.symbol ? 'active' : ''}" data-coin-card="${coin.symbol}" onclick="filterByCoin('${coin.symbol}')">
                 <div class="stat-header">
                     <div>
-                        <div class="stat-coin-name">${coin.name}</div>
-                        <div class="stat-coin-symbol">${coin.symbol}</div>
+                        <div class="stat-coin-name" style="display: flex; align-items: center; gap: 4px;">
+                            ${coin.name} ${starIconHtml}
+                        </div>
+                        <div class="stat-coin-symbol" style="display: flex; align-items: center;">
+                            ${coin.symbol} ${sentimentBadgeHtml}
+                        </div>
                     </div>
                     <svg class="stat-sparkline" viewBox="0 0 100 30">
                         <defs>
@@ -351,9 +482,7 @@ function renderStatsCards() {
                                 <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/>
                             </linearGradient>
                         </defs>
-                        <!-- Sparkline shaded area -->
                         <path d="${sparklinePath} L 100 30 L 0 30 Z" fill="url(#${fillGradId})"></path>
-                        <!-- Sparkline stroke path -->
                         <path d="${sparklinePath}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round"></path>
                     </svg>
                 </div>
@@ -387,20 +516,23 @@ function selectFocusCoin(sym) {
     state.filters.coin = sym;
     state.filters.showBookmarks = false;
     
-    // Deactivate bookmark button style
     const bookmarkBtn = document.getElementById('bookmark-toggle-btn');
     if (bookmarkBtn) bookmarkBtn.classList.remove('active');
     
-    // Update volume list active state
     document.querySelectorAll('#coin-volume-list .volume-item').forEach(el => {
         el.classList.toggle('active', el.dataset.coin === sym);
     });
     
-    // Render news feed based on the filtered coin
-    renderNewsFeed();
+    document.querySelectorAll('.stat-card').forEach(el => {
+        el.classList.toggle('active', el.dataset.coinCard === sym);
+    });
     
-    // Trigger historical chart and advisor updates
+    renderNewsFeed();
     triggerCoinFocusUpdate(sym);
+    
+    if (window.innerWidth <= 900) {
+        document.body.classList.add('coin-details-open');
+    }
 }
 
 /* 3. News Feed Stream */
@@ -411,7 +543,6 @@ function renderNewsFeed() {
     
     if (!feedContainer) return;
     
-    // Filter news
     let filtered = [...state.news];
     
     if (state.filters.showBookmarks) {
@@ -419,6 +550,18 @@ function renderNewsFeed() {
         filtered = filtered.filter(a => state.bookmarks.some(b => b.link === a.link));
     } else {
         feedTitle.innerText = "Latest Market News";
+        
+        // Watchlist filter focus
+        if (state.filters.showWatchlist) {
+            filtered = filtered.filter(a => a.tags.some(tag => state.watchlist.includes(tag)));
+        }
+        
+        // News Age Limit Filter
+        if (state.filters.maxAgeDays !== 31) {
+            const maxAgeSec = state.filters.maxAgeDays * 24 * 60 * 60;
+            const nowSec = Date.now() / 1000;
+            filtered = filtered.filter(a => (nowSec - a.timestamp) <= maxAgeSec);
+        }
         
         // Tag Filter
         if (state.filters.coin !== 'All') {
@@ -444,7 +587,6 @@ function renderNewsFeed() {
         }
     }
     
-    // Update count display
     feedCountDisplay.innerText = `Showing ${filtered.length} articles`;
     
     if (filtered.length === 0) {
@@ -916,20 +1058,15 @@ function renderFocusCardContent(symbol, pricesData) {
     const coinId = coinIdMapping[symbol];
     const coinName = coinNameMapping[symbol];
     const coinPriceInfo = state.prices[coinId] || { usd: 0, usd_24h_change: 0 };
-    const priceText = parseFloat(coinPriceInfo.usd).toLocaleString('en-US', { 
-        minimumFractionDigits: symbol === 'ADA' ? 4 : 2, 
-        maximumFractionDigits: symbol === 'ADA' ? 4 : 2 
-    });
+    const priceText = formatCoinPrice(coinPriceInfo.usd, symbol);
     
     const change = parseFloat(coinPriceInfo.usd_24h_change || 0);
     const isPos = change >= 0;
     const changeClass = isPos ? 'pos' : 'neg';
     const changeText = (isPos ? '+' : '') + change.toFixed(2) + '%';
     
-    // Render SVG Line Chart
-    const svgHtml = drawInteractiveChart(pricesData, isPos);
+    const svgHtml = drawInteractiveChart(pricesData, isPos, symbol);
     
-    // Calculate options rating score (-100 to +100)
     let coinSentimentVal = 0;
     if (state.summary.coinInsights && state.summary.coinInsights[symbol]) {
         const sent = state.summary.coinInsights[symbol].sentiment;
@@ -937,7 +1074,6 @@ function renderFocusCardContent(symbol, pricesData) {
         else if (sent === 'Bearish') coinSentimentVal = -70;
     }
     
-    // Combine 24h change (momentum) and news sentiment
     let score = (0.6 * change * 15) + (0.4 * coinSentimentVal);
     score = Math.max(-100, Math.min(100, score));
     
@@ -970,6 +1106,9 @@ function renderFocusCardContent(symbol, pricesData) {
     
     const sliderPercentage = 50 + score / 2;
     
+    const isStarred = state.watchlist.includes(symbol);
+    const starClass = isStarred ? 'active' : '';
+    
     container.innerHTML = `
         <div class="focus-header">
             <div class="focus-coin-info">
@@ -978,13 +1117,21 @@ function renderFocusCardContent(symbol, pricesData) {
                     <button class="bell-btn" id="bell-alert-btn" title="Set Price Alert" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
                         <i data-lucide="bell" style="width: 14px; height: 14px;"></i>
                     </button>
+                    <button class="star-btn ${starClass}" id="watchlist-star-btn" title="Toggle Watchlist" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
+                        <i data-lucide="star" style="width: 14px; height: 14px; ${isStarred ? 'fill:#eab308;' : ''}"></i>
+                    </button>
                 </h3>
                 <div class="focus-price-container">
                     <span class="focus-price focus-price-val">$${priceText}</span>
                     <span class="focus-change focus-change-val ${changeClass}">${changeText}</span>
                 </div>
             </div>
-            <span class="ai-badge"><i data-lucide="sparkles"></i> Options Advisor</span>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span class="ai-badge"><i data-lucide="sparkles"></i> Options Advisor</span>
+                <button class="icon-btn mobile-only" id="coin-focus-close-btn" title="Close Panel" style="padding: 4px;">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Toggleable Alert Creation Panel -->
@@ -1037,6 +1184,28 @@ function renderFocusCardContent(symbol, pricesData) {
             <div class="chart-tooltip" id="focus-chart-tooltip"></div>
         </div>
         
+        <!-- Coin Specific Sentiment Gauge widget -->
+        ${(() => {
+            if (state.summary.coinInsights && state.summary.coinInsights[symbol]) {
+                const insight = state.summary.coinInsights[symbol];
+                const cScore = insight.score || 50;
+                const cSent = insight.sentiment || 'Neutral';
+                const cSentClass = cSent.toLowerCase();
+                return `
+                    <div class="coin-sentiment-widget">
+                        <div class="coin-sentiment-header">
+                            <span>Sentiment: <strong class="${cSentClass === 'bullish' ? 'pos' : cSentClass === 'bearish' ? 'neg' : ''}">${cSent}</strong></span>
+                            <span>Score: <strong>${cScore}/100</strong></span>
+                        </div>
+                        <div class="coin-sentiment-bar-track">
+                            <div class="coin-sentiment-bar-needle" style="left: ${cScore}%;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+            return '';
+        })()}
+        
         <!-- Option Trading Trend Section -->
         <div class="options-section">
             <div class="options-title-bar">
@@ -1044,7 +1213,6 @@ function renderFocusCardContent(symbol, pricesData) {
                 <span class="options-badge ${badgeClass}">${label}</span>
             </div>
             
-            <!-- Custom slider -->
             <div class="trend-slider-container">
                 <div class="trend-slider-track">
                     <div class="trend-slider-marker" style="left: ${sliderPercentage}%;"></div>
@@ -1068,6 +1236,39 @@ function renderFocusCardContent(symbol, pricesData) {
     `;
     
     lucide.createIcons();
+    
+    // Watchlist Toggle
+    const starBtn = document.getElementById('watchlist-star-btn');
+    if (starBtn) {
+        starBtn.addEventListener('click', () => {
+            const isStarred = state.watchlist.includes(symbol);
+            if (isStarred) {
+                state.watchlist = state.watchlist.filter(s => s !== symbol);
+            } else {
+                state.watchlist.push(symbol);
+            }
+            localStorage.setItem('pulse_watchlist', JSON.stringify(state.watchlist));
+            
+            starBtn.classList.toggle('active', !isStarred);
+            const icon = starBtn.querySelector('i');
+            if (icon) {
+                icon.style.fill = !isStarred ? '#eab308' : '';
+            }
+            
+            renderStatsCards();
+            if (state.filters.showWatchlist) {
+                renderNewsFeed();
+            }
+        });
+    }
+    
+    // Close Mobile Coin Drawer
+    const closeBtn = document.getElementById('coin-focus-close-btn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            document.body.classList.remove('coin-details-open');
+        });
+    }
     
     // Timeframe selector trigger
     document.querySelectorAll('.timeframe-btn').forEach(btn => {
@@ -1162,7 +1363,7 @@ function renderFocusCardContent(symbol, pricesData) {
     setupChartHoverHandlers(pricesData);
 }
 
-function drawInteractiveChart(pricesData, isBullish) {
+function drawInteractiveChart(pricesData, isBullish, symbol) {
     const W = 500;
     const H = 150;
     const P_x = 40;
@@ -1184,7 +1385,6 @@ function drawInteractiveChart(pricesData, isBullish) {
         lineD += ` L ${getX(i)} ${getY(prices[i])}`;
     }
     
-    // Calculate SMA-7 path
     const smaValues = calculateSMA(prices, 7);
     let smaD = `M ${getX(0)} ${getY(smaValues[0])}`;
     for (let i = 1; i < smaValues.length; i++) {
@@ -1207,9 +1407,7 @@ function drawInteractiveChart(pricesData, isBullish) {
     `;
     
     const formatYVal = (val) => {
-        if (val >= 1000) return '$' + Math.round(val).toLocaleString();
-        if (val < 1) return '$' + val.toFixed(4);
-        return '$' + val.toFixed(2);
+        return '$' + formatCoinPrice(val, symbol);
     };
     
     const axisLabelsY = `
@@ -1245,23 +1443,16 @@ function drawInteractiveChart(pricesData, isBullish) {
             ${gridHtml}
             ${axisLabelsY}
             ${axisLabelsX}
-            <!-- Shaded Area -->
             <path d="${areaD}" fill="url(#${gradId})" style="pointer-events:none;"></path>
-            
-            <!-- SMA Line Path -->
             <path d="${smaD}" fill="none" stroke="var(--accent-purple)" stroke-width="1.5" stroke-dasharray="2,3" style="pointer-events:none;"></path>
-            
-            <!-- Line Path -->
             <path d="${lineD}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" style="pointer-events:none;"></path>
-            
-            <!-- Hover Elements -->
             <line class="chart-hover-line" id="focus-hover-line" x1="0" y1="${P_y}" x2="0" y2="${H - P_y}"></line>
             <circle class="chart-hover-dot" id="focus-hover-dot" cx="0" cy="0"></circle>
         </svg>
     `;
 }
 
-function setupChartHoverHandlers(pricesData) {
+function setupChartHoverHandlers(pricesData, symbol) {
     const chartWrapper = document.getElementById('focus-chart-wrapper');
     const hoverLine = document.getElementById('focus-hover-line');
     const hoverDot = document.getElementById('focus-hover-dot');
@@ -1298,6 +1489,7 @@ function setupChartHoverHandlers(pricesData) {
         const indexWidthRatio = (prices.length - 1) / (W - P_x - 10);
         let index = Math.round((mouseX - P_x) * indexWidthRatio);
         index = Math.max(0, Math.min(prices.length - 1, index));
+        index = Math.max(0, Math.min(prices.length - 1, index));
         
         const [timestamp, price] = pricesData[index];
         
@@ -1316,11 +1508,7 @@ function setupChartHoverHandlers(pricesData) {
             hour: '2-digit',
             minute: '2-digit'
         });
-        const formattedPrice = price.toLocaleString('en-US', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: price < 1 ? 4 : 2
-        });
+        const formattedPrice = '$' + formatCoinPrice(price, symbol);
         
         tooltip.innerHTML = `<strong>${formattedPrice}</strong><br><span style="color:var(--text-secondary)">${timeFormatted}</span>`;
         tooltip.style.opacity = '1';
@@ -1751,7 +1939,7 @@ function updateLiveUI(symbol, price, change, volume) {
         const priceEl = el.querySelector('.ticker-price');
         const changeEl = el.querySelector('.ticker-change');
         if (priceEl) {
-            priceEl.innerText = '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            priceEl.innerText = '$' + formatCoinPrice(price, symbol);
         }
         if (changeEl) {
             const isPos = change >= 0;
@@ -1766,10 +1954,7 @@ function updateLiveUI(symbol, price, change, volume) {
         const priceEl = statCard.querySelector('.stat-price');
         const changeEl = statCard.querySelector('.stat-change');
         if (priceEl) {
-            priceEl.innerText = '$' + price.toLocaleString('en-US', { 
-                minimumFractionDigits: symbol === 'ADA' ? 4 : 2, 
-                maximumFractionDigits: symbol === 'ADA' ? 4 : 2 
-            });
+            priceEl.innerText = '$' + formatCoinPrice(price, symbol);
         }
         if (changeEl) {
             const isPos = change >= 0;
@@ -1793,10 +1978,7 @@ function updateLiveUI(symbol, price, change, volume) {
         const focusPrice = document.querySelector('.focus-price-val');
         const focusChange = document.querySelector('.focus-change-val');
         if (focusPrice) {
-            focusPrice.innerText = '$' + price.toLocaleString('en-US', {
-                minimumFractionDigits: symbol === 'ADA' ? 4 : 2,
-                maximumFractionDigits: symbol === 'ADA' ? 4 : 2
-            });
+            focusPrice.innerText = '$' + formatCoinPrice(price, symbol);
         }
         if (focusChange) {
             const isPos = change >= 0;

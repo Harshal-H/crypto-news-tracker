@@ -9,6 +9,7 @@ import email.utils
 import random
 import xml.etree.ElementTree as ET
 from urllib.error import URLError
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PORT = int(os.environ.get('PORT', 8000))
 PUBLIC_DIR = os.path.join(os.path.dirname(__file__), 'public')
@@ -223,7 +224,7 @@ def calculate_article_sentiment(article):
         return 'neutral', 0
 
 def fetch_and_aggregate_news():
-    """Fetch from all RSS feeds and compile a unified sorted news list."""
+    """Fetch from all RSS feeds concurrently and compile a unified sorted news list."""
     current_time = time.time()
     if NEWS_CACHE['data'] and (current_time - NEWS_CACHE['last_updated'] < NEWS_CACHE['expiry']):
         return NEWS_CACHE['data']
@@ -231,17 +232,25 @@ def fetch_and_aggregate_news():
     aggregated = []
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     
-    for source, url in FEEDS.items():
+    def fetch_single_feed(source, url):
         req = urllib.request.Request(url, headers=headers)
         try:
-            print(f"Fetching RSS feed from {source}...")
-            with urllib.request.urlopen(req, timeout=8) as response:
+            print(f"Fetching RSS feed concurrently from {source}...")
+            with urllib.request.urlopen(req, timeout=4) as response:
                 xml_data = response.read()
                 feed_articles = parse_rss(xml_data, source)
                 print(f"Parsed {len(feed_articles)} articles from {source}")
-                aggregated.extend(feed_articles)
+                return feed_articles
         except Exception as e:
             print(f"Error fetching from {source}: {e}")
+            return []
+
+    # Fetch concurrently to improve aggregation speed
+    with ThreadPoolExecutor(max_workers=len(FEEDS)) as executor:
+        futures = {executor.submit(fetch_single_feed, src, url): src for src, url in FEEDS.items()}
+        for future in as_completed(futures):
+            feed_articles = future.result()
+            aggregated.extend(feed_articles)
             
     # Process sentiment and tag coins
     processed_articles = []
@@ -341,6 +350,7 @@ def generate_summary():
         if not coin_list:
             coin_insights[symbol] = {
                 'sentiment': 'Neutral',
+                'score': 50,
                 'mentions': 0,
                 'summary': "No recent news matching this coin."
             }
@@ -355,6 +365,13 @@ def generate_summary():
         elif neg > pos + 1:
             c_sentiment = 'Bearish'
             
+        # Calculate numeric sentiment score for the specific coin (0-100 scale)
+        total_c = len(coin_list)
+        c_score = 50
+        if total_c > 0:
+            c_score = int(50 + ((pos - neg) / total_c) * 50)
+            c_score = max(10, min(95, c_score))
+            
         # Synthesize brief based on headlines
         headlines = [a['title'] for a in coin_list[:2]]
         headlines_bullets = " and ".join(f"'{h}'" for h in headlines)
@@ -368,6 +385,7 @@ def generate_summary():
             
         coin_insights[symbol] = {
             'sentiment': c_sentiment,
+            'score': c_score,
             'mentions': len(coin_list),
             'summary': summary_text
         }

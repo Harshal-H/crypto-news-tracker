@@ -40,8 +40,14 @@
                 <span class="pulse-dot"></span>
                 Live Feed
             </span>
+            <button id="theme-toggle-btn" class="icon-btn" title="Toggle Light/Dark Theme">
+                <i id="theme-icon-desktop" data-lucide="sun"></i>
+            </button>
             <button id="refresh-btn" class="icon-btn" title="Refresh Feed">
                 <i data-lucide="rotate-cw"></i>
+            </button>
+            <button id="filter-drawer-toggle" class="icon-btn mobile-only-btn" title="Toggle Filters">
+                <i data-lucide="menu"></i>
             </button>
         </div>
     </header>
@@ -62,11 +68,34 @@
         <div class="dashboard-layout">
             <!-- Left Panel: Control Center -->
             <aside class="control-panel">
+                <!-- Mobile Drawer Header -->
+                <div class="control-panel-header mobile-only">
+                    <h3>Filters & Settings</h3>
+                    <button id="drawer-close-btn" class="icon-btn">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+
                 <div class="panel-section search-section">
                     <h3>Search & Filters</h3>
                     <div class="search-box">
                         <i data-lucide="search"></i>
                         <input type="text" id="search-input" placeholder="Search headlines, events...">
+                    </div>
+                    
+                    <!-- Watchlist Toggle Focus -->
+                    <button id="watchlist-filter-btn" class="watchlist-filter-btn" title="Filter to watchlisted coins">
+                        <span>Watchlist Only</span>
+                        <i data-lucide="star"></i>
+                    </button>
+                    
+                    <!-- News Age Range Slider -->
+                    <div class="slider-group">
+                        <div class="slider-label-row">
+                            <span>Filter by News Age:</span>
+                            <span class="slider-val" id="news-age-val">All News</span>
+                        </div>
+                        <input type="range" id="news-age-slider" class="range-slider" min="1" max="31" value="31">
                     </div>
                 </div>
 
@@ -223,15 +252,15 @@
             <i data-lucide="bell"></i>
             <span>Alerts</span>
         </button>
-        <button class="mobile-nav-btn" data-tab="tab-filters">
-            <i data-lucide="sliders"></i>
-            <span>Filters</span>
-        </button>
         <button class="mobile-nav-btn" data-tab="tab-insights">
             <i data-lucide="sparkles"></i>
             <span>Insights</span>
         </button>
     </div>
+
+    <!-- Mobile Drawer Overlays -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="coin-details-overlay" id="coin-details-overlay"></div>
 
     <!-- Script -->
     <script src="app.js"></script>
