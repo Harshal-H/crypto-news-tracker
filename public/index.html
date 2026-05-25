@@ -29,31 +29,38 @@
 
     <!-- Main Navigation / Header -->
     <header class="app-header">
-        <div class="header-logo">
-            <div class="logo-icon">
-                <i data-lucide="activity"></i>
+        <div class="header-logo-container" style="display: flex; align-items: center; gap: 8px;">
+            <button id="filter-drawer-toggle" class="icon-btn mobile-only-btn" title="Toggle Filters" style="margin-right: 4px;">
+                <i data-lucide="menu"></i>
+            </button>
+            <div class="header-logo">
+                <div class="logo-icon">
+                    <i data-lucide="activity"></i>
+                </div>
+                <h1>Pulse<span>Crypto</span></h1>
             </div>
-            <h1>Pulse<span>Crypto</span></h1>
         </div>
         <div class="header-actions">
             <span class="pulse-indicator">
                 <span class="pulse-dot"></span>
                 Live Feed
             </span>
-            <button id="theme-toggle-btn" class="icon-btn" title="Toggle Light/Dark Theme">
-                <i id="theme-icon-desktop" data-lucide="sun"></i>
-            </button>
             <button id="refresh-btn" class="icon-btn" title="Refresh Feed">
                 <i data-lucide="rotate-cw"></i>
-            </button>
-            <button id="filter-drawer-toggle" class="icon-btn mobile-only-btn" title="Toggle Filters">
-                <i data-lucide="menu"></i>
             </button>
         </div>
     </header>
 
     <!-- App Container -->
     <main class="app-container">
+        <!-- Coin Search Bar -->
+        <div class="coin-search-container" style="position: relative; width: 100%; max-width: 500px; margin: 0 auto 16px auto;">
+            <div class="search-box" style="display: flex; align-items: center; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 14px; gap: 8px; width: 100%;">
+                <i data-lucide="search" style="width: 16px; height: 16px; color: var(--text-muted);"></i>
+                <input type="text" id="coin-search-input" placeholder="Search specific coin or market (e.g. Bitcoin, Ripple)..." autocomplete="off" style="background: none; border: none; outline: none; color: var(--text-primary); font-size: 0.85rem; width: 100%;">
+            </div>
+            <div class="coin-search-results" id="coin-search-results"></div>
+        </div>
         <!-- Live Market Stats Cards -->
         <section class="stats-grid" id="stats-container">
             <!-- Populated via JS (BTC, ETH, SOL, XRP, ADA cards) -->
@@ -70,79 +77,104 @@
             <aside class="control-panel">
                 <!-- Mobile Drawer Header -->
                 <div class="control-panel-header mobile-only">
-                    <h3>Filters & Settings</h3>
+                    <h3>Navigation</h3>
                     <button id="drawer-close-btn" class="icon-btn">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
-
-                <div class="panel-section search-section">
-                    <h3>Search & Filters</h3>
-                    <div class="search-box">
-                        <i data-lucide="search"></i>
-                        <input type="text" id="search-input" placeholder="Search headlines, events...">
-                    </div>
-                    
-                    <!-- Watchlist Toggle Focus -->
-                    <button id="watchlist-filter-btn" class="watchlist-filter-btn" title="Filter to watchlisted coins">
-                        <span>Watchlist Only</span>
-                        <i data-lucide="star"></i>
-                    </button>
-                    
-                    <!-- News Age Range Slider -->
-                    <div class="slider-group">
-                        <div class="slider-label-row">
-                            <span>Filter by News Age:</span>
-                            <span class="slider-val" id="news-age-val">All News</span>
+                
+                <!-- Desktop Sidebar Tab Switcher -->
+                <div class="sidebar-tabs desktop-only-flex" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; width: 100%;">
+                    <button class="sidebar-tab-btn active" data-sidebar-tab="tab-filters" style="flex: 1; background: none; border: none; padding: 6px 12px; color: var(--text-primary); font-family: var(--font-heading); font-weight: 600; cursor: pointer; border-radius: var(--radius-sm); transition: var(--transition);">Filters</button>
+                    <button class="sidebar-tab-btn" data-sidebar-tab="tab-settings" style="flex: 1; background: none; border: none; padding: 6px 12px; color: var(--text-muted); font-family: var(--font-heading); font-weight: 600; cursor: pointer; border-radius: var(--radius-sm); transition: var(--transition);">Settings</button>
+                </div>
+                
+                <!-- FILTERS PANEL CONTENT -->
+                <div class="sidebar-panel-view active" id="sidebar-filters-view">
+                    <div class="panel-section search-section">
+                        <h3>Search Headlines</h3>
+                        <div class="search-box">
+                            <i data-lucide="search"></i>
+                            <input type="text" id="search-input" placeholder="Search headlines, events...">
                         </div>
-                        <input type="range" id="news-age-slider" class="range-slider" min="1" max="31" value="31">
+                        
+                        <!-- Watchlist Toggle Focus -->
+                        <button id="watchlist-filter-btn" class="watchlist-filter-btn" title="Filter to watchlisted coins">
+                            <span>Watchlist Only</span>
+                            <i data-lucide="star"></i>
+                        </button>
+                    </div>
+
+                    <div class="panel-section filter-section">
+                        <h4>24h Trading Volume</h4>
+                        <div class="volume-list" id="coin-volume-list">
+                            <div class="volume-item skeleton-mini"></div>
+                            <div class="volume-item skeleton-mini"></div>
+                            <div class="volume-item skeleton-mini"></div>
+                            <div class="volume-item skeleton-mini"></div>
+                            <div class="volume-item skeleton-mini"></div>
+                        </div>
+                    </div>
+
+                    <div class="panel-section filter-section">
+                        <h4>Filter by Source</h4>
+                        <div class="source-filters" id="source-filters">
+                            <button class="source-btn active" data-source="All">All Sources</button>
+                            <button class="source-btn" data-source="CoinDesk">CoinDesk</button>
+                            <button class="source-btn" data-source="Cointelegraph">Cointelegraph</button>
+                            <button class="source-btn" data-source="Decrypt">Decrypt</button>
+                            <button class="source-btn" data-source="CryptoNews">CryptoNews</button>
+                        </div>
+                    </div>
+
+                    <div class="panel-section filter-section">
+                        <h4>Sentiment Filter</h4>
+                        <div class="sentiment-filters" id="sentiment-filters">
+                            <button class="sentiment-filter-btn active" data-sent="All">All</button>
+                            <button class="sentiment-filter-btn pos" data-sent="positive"><i data-lucide="trending-up"></i> Bullish</button>
+                            <button class="sentiment-filter-btn neu" data-sent="neutral"><i data-lucide="minus"></i> Neutral</button>
+                            <button class="sentiment-filter-btn neg" data-sent="negative"><i data-lucide="trending-down"></i> Bearish</button>
+                        </div>
+                    </div>
+
+                    <div class="panel-section view-toggle-section">
+                        <button id="bookmark-toggle-btn" class="toggle-btn">
+                            <i data-lucide="bookmark"></i>
+                            <span>Show Saved Articles</span>
+                            <span class="badge" id="bookmark-count">0</span>
+                        </button>
+                    </div>
+
+                    <div class="panel-section alerts-sidebar-section">
+                        <h3>Price Alerts</h3>
+                        <div class="active-alerts-list" id="active-alerts-list">
+                            <span class="no-alerts-label">No active price alerts</span>
+                        </div>
                     </div>
                 </div>
-
-                <div class="panel-section filter-section">
-                    <h4>24h Trading Volume</h4>
-                    <div class="volume-list" id="coin-volume-list">
-                        <div class="volume-item skeleton-mini"></div>
-                        <div class="volume-item skeleton-mini"></div>
-                        <div class="volume-item skeleton-mini"></div>
-                        <div class="volume-item skeleton-mini"></div>
-                        <div class="volume-item skeleton-mini"></div>
-                    </div>
-                </div>
-
-                <div class="panel-section filter-section">
-                    <h4>Filter by Source</h4>
-                    <div class="source-filters" id="source-filters">
-                        <button class="source-btn active" data-source="All">All Sources</button>
-                        <button class="source-btn" data-source="CoinDesk">CoinDesk</button>
-                        <button class="source-btn" data-source="Cointelegraph">Cointelegraph</button>
-                        <button class="source-btn" data-source="Decrypt">Decrypt</button>
-                        <button class="source-btn" data-source="CryptoNews">CryptoNews</button>
-                    </div>
-                </div>
-
-                <div class="panel-section filter-section">
-                    <h4>Sentiment Filter</h4>
-                    <div class="sentiment-filters" id="sentiment-filters">
-                        <button class="sentiment-filter-btn active" data-sent="All">All</button>
-                        <button class="sentiment-filter-btn pos" data-sent="positive"><i data-lucide="trending-up"></i> Bullish</button>
-                        <button class="sentiment-filter-btn neu" data-sent="neutral"><i data-lucide="minus"></i> Neutral</button>
-                        <button class="sentiment-filter-btn neg" data-sent="negative"><i data-lucide="trending-down"></i> Bearish</button>
-                    </div>
-                </div>
-
-                <div class="panel-section view-toggle-section">
-                    <button id="bookmark-toggle-btn" class="toggle-btn">
-                        <i data-lucide="bookmark"></i>
-                        <span>Show Saved Articles</span>
-                        <span class="badge" id="bookmark-count">0</span>
-                    </button>
-                </div>
-
-                <div class="panel-section alerts-sidebar-section">
-                    <h3>Price Alerts</h3>
-                    <div class="active-alerts-list" id="active-alerts-list">
-                        <span class="no-alerts-label">No active price alerts</span>
+                
+                <!-- SETTINGS PANEL CONTENT -->
+                <div class="sidebar-panel-view" id="sidebar-settings-view" style="display: none; width: 100%;">
+                    <div class="panel-section settings-section">
+                        <h3>App Customization</h3>
+                        
+                        <div class="setting-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">Background Theme:</span>
+                            <div class="theme-select-row" style="display: flex; gap: 8px;">
+                                <button id="theme-btn-dark" class="source-btn active" style="flex: 1; padding: 10px 0;">Dark Mode</button>
+                                <button id="theme-btn-light" class="source-btn" style="flex: 1; padding: 10px 0;">Light Mode</button>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                            <div class="slider-group" style="margin-top: 0;">
+                                <div class="slider-label-row">
+                                    <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">Filter by News Age:</span>
+                                    <span class="slider-val" id="news-age-val">All News</span>
+                                </div>
+                                <input type="range" id="news-age-slider" class="range-slider" min="1" max="31" value="31">
+                            </div>
+                        </div>
                     </div>
                 </div>
             </aside>
@@ -177,6 +209,13 @@
                     <h3>Market Sentiment Meter</h3>
                     <div class="gauge-container">
                         <svg class="gauge" viewBox="0 0 100 50">
+                            <defs>
+                                <linearGradient id="sentimentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stop-color="var(--bearish)"></stop>
+                                    <stop offset="50%" stop-color="var(--neutral)"></stop>
+                                    <stop offset="100%" stop-color="var(--bullish)"></stop>
+                                </linearGradient>
+                            </defs>
                             <!-- Gauge background arc -->
                             <path class="gauge-bg" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke-width="8"></path>
                             <!-- Colored indicators overlay -->
@@ -184,13 +223,15 @@
                         </svg>
                         <div class="gauge-needle-center"></div>
                         <div class="gauge-needle" id="gauge-needle"></div>
-                        <div class="gauge-value" id="sentiment-value">50</div>
-                        <div class="gauge-label" id="sentiment-label">Neutral</div>
                     </div>
                     <div class="gauge-ticks">
                         <span>Fear</span>
                         <span>Neutral</span>
                         <span>Greed</span>
+                    </div>
+                    <div class="gauge-info" style="display: flex; flex-direction: column; align-items: center; margin-top: 12px; gap: 2px;">
+                        <div class="gauge-value" id="sentiment-value">50</div>
+                        <div class="gauge-label" id="sentiment-label">Neutral</div>
                     </div>
                 </div>
 
@@ -255,6 +296,10 @@
         <button class="mobile-nav-btn" data-tab="tab-insights">
             <i data-lucide="sparkles"></i>
             <span>Insights</span>
+        </button>
+        <button class="mobile-nav-btn" data-tab="tab-settings">
+            <i data-lucide="settings"></i>
+            <span>Settings</span>
         </button>
     </div>
 

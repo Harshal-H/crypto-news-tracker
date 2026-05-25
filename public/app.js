@@ -87,6 +87,20 @@ function applyTheme(theme) {
         desktopIcon.className = theme === 'light' ? 'lucide lucide-moon' : 'lucide lucide-sun';
         desktopIcon.setAttribute('data-lucide', theme === 'light' ? 'moon' : 'sun');
     }
+    
+    // Update settings buttons active classes
+    const themeBtnDark = document.getElementById('theme-btn-dark');
+    const themeBtnLight = document.getElementById('theme-btn-light');
+    if (themeBtnDark && themeBtnLight) {
+        if (theme === 'light') {
+            themeBtnLight.classList.add('active');
+            themeBtnDark.classList.remove('active');
+        } else {
+            themeBtnDark.classList.add('active');
+            themeBtnLight.classList.remove('active');
+        }
+    }
+    
     lucide.createIcons();
 }
 
@@ -162,6 +176,23 @@ function setupEventListeners() {
     const filterDrawerToggle = document.getElementById('filter-drawer-toggle');
     if (filterDrawerToggle) {
         filterDrawerToggle.addEventListener('click', () => {
+            // Ensure filters view is showing inside the drawer on mobile
+            const filtersView = document.getElementById('sidebar-filters-view');
+            const settingsView = document.getElementById('sidebar-settings-view');
+            if (filtersView && settingsView) {
+                filtersView.style.display = 'block';
+                settingsView.style.display = 'none';
+            }
+            const sidebarTabBtns = document.querySelectorAll('.sidebar-tab-btn');
+            sidebarTabBtns.forEach(btn => {
+                if (btn.dataset.sidebarTab === 'tab-filters') {
+                    btn.classList.add('active');
+                    btn.style.color = 'var(--text-primary)';
+                } else {
+                    btn.classList.remove('active');
+                    btn.style.color = 'var(--text-muted)';
+                }
+            });
             document.body.classList.toggle('drawer-open');
         });
     }
@@ -321,6 +352,129 @@ function setupEventListeners() {
             document.body.classList.remove('drawer-open', 'coin-details-open');
         }
     });
+
+    // Sidebar Tabs Switcher (Desktop)
+    const sidebarTabBtns = document.querySelectorAll('.sidebar-tab-btn');
+    sidebarTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.sidebarTab;
+            sidebarTabBtns.forEach(b => {
+                b.classList.remove('active');
+            });
+            btn.classList.add('active');
+            
+            const filtersView = document.getElementById('sidebar-filters-view');
+            const settingsView = document.getElementById('sidebar-settings-view');
+            if (filtersView && settingsView) {
+                if (tab === 'tab-filters') {
+                    filtersView.style.display = 'block';
+                    settingsView.style.display = 'none';
+                } else {
+                    filtersView.style.display = 'none';
+                    settingsView.style.display = 'block';
+                }
+            }
+        });
+    });
+
+    // Theme buttons in settings panel
+    const themeBtnDark = document.getElementById('theme-btn-dark');
+    const themeBtnLight = document.getElementById('theme-btn-light');
+    if (themeBtnDark) {
+        themeBtnDark.addEventListener('click', () => applyTheme('dark'));
+    }
+    if (themeBtnLight) {
+        themeBtnLight.addEventListener('click', () => applyTheme('light'));
+    }
+
+    // Swipe Gestures for Drawer
+    let touchStartX = 0;
+    let touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].clientX;
+        touchStartY = e.changedTouches[0].clientY;
+    }, { passive: true });
+    
+    document.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        
+        const diffX = touchEndX - touchStartX;
+        const diffY = touchEndY - touchStartY;
+        
+        // Ensure vertical displacement is minimal compared to horizontal
+        if (Math.abs(diffX) > Math.abs(diffY) * 2) {
+            const isDrawerOpen = document.body.classList.contains('drawer-open');
+            if (!isDrawerOpen && touchStartX < 50 && diffX > 70) {
+                document.body.classList.add('drawer-open');
+            } else if (isDrawerOpen && diffX < -50) {
+                document.body.classList.remove('drawer-open');
+            }
+        }
+    }, { passive: true });
+
+    // Coin Search Facility
+    const coinSearchInput = document.getElementById('coin-search-input');
+    const coinSearchResults = document.getElementById('coin-search-results');
+    
+    if (coinSearchInput && coinSearchResults) {
+        coinSearchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            if (!query) {
+                coinSearchResults.style.display = 'none';
+                coinSearchResults.innerHTML = '';
+                return;
+            }
+            
+            const matches = [];
+            Object.entries(coinNameMapping).forEach(([symbol, name]) => {
+                if (symbol.toLowerCase().includes(query) || name.toLowerCase().includes(query)) {
+                    matches.push({ symbol, name });
+                }
+            });
+            
+            if (matches.length > 0) {
+                coinSearchResults.innerHTML = matches.map(m => `
+                    <div class="coin-search-item" data-coin="${m.symbol}">
+                        <span class="coin-search-symbol">${m.symbol}</span>
+                        <span class="coin-search-name">${m.name}</span>
+                    </div>
+                `).join('');
+                coinSearchResults.style.display = 'block';
+            } else {
+                coinSearchResults.innerHTML = `<div style="padding: 10px 14px; font-size: 0.85rem; color: var(--text-muted);">No matches found</div>`;
+                coinSearchResults.style.display = 'block';
+            }
+        });
+        
+        coinSearchResults.addEventListener('click', (e) => {
+            const item = e.target.closest('.coin-search-item');
+            if (item) {
+                const symbol = item.dataset.coin;
+                selectFocusCoin(symbol);
+                coinSearchInput.value = '';
+                coinSearchResults.style.display = 'none';
+                
+                // Switch mobile view to Market tab (tab-focus) if on mobile
+                if (window.innerWidth <= 900) {
+                    const marketBtn = document.querySelector('.mobile-nav-btn[data-tab="tab-focus"]');
+                    if (marketBtn) marketBtn.click();
+                }
+                
+                // Center in carousel if mobile or desktop stats
+                const statCard = document.querySelector(`.stat-card[data-coin-card="${symbol}"]`);
+                if (statCard) {
+                    statCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }
+            }
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!coinSearchInput.contains(e.target) && !coinSearchResults.contains(e.target)) {
+                coinSearchResults.style.display = 'none';
+            }
+        });
+    }
 }
 
 // ==========================================================================
@@ -529,10 +683,6 @@ function selectFocusCoin(sym) {
     
     renderNewsFeed();
     triggerCoinFocusUpdate(sym);
-    
-    if (window.innerWidth <= 900) {
-        document.body.classList.add('coin-details-open');
-    }
 }
 
 /* 3. News Feed Stream */
@@ -1113,7 +1263,13 @@ function renderFocusCardContent(symbol, pricesData) {
         <div class="focus-header">
             <div class="focus-coin-info">
                 <h3 style="display: flex; align-items: center; gap: 8px;">
-                    ${coinName} <span>(${symbol})</span>
+                    <select id="focus-coin-select" class="focus-coin-select" style="font-size: 1.05rem; font-family: var(--font-heading); font-weight: 700; padding: 4px 10px;">
+                        <option value="BTC" ${symbol === 'BTC' ? 'selected' : ''}>Bitcoin (BTC)</option>
+                        <option value="ETH" ${symbol === 'ETH' ? 'selected' : ''}>Ethereum (ETH)</option>
+                        <option value="SOL" ${symbol === 'SOL' ? 'selected' : ''}>Solana (SOL)</option>
+                        <option value="XRP" ${symbol === 'XRP' ? 'selected' : ''}>Ripple (XRP)</option>
+                        <option value="ADA" ${symbol === 'ADA' ? 'selected' : ''}>Cardano (ADA)</option>
+                    </select>
                     <button class="bell-btn" id="bell-alert-btn" title="Set Price Alert" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
                         <i data-lucide="bell" style="width: 14px; height: 14px;"></i>
                     </button>
@@ -1236,6 +1392,14 @@ function renderFocusCardContent(symbol, pricesData) {
     `;
     
     lucide.createIcons();
+    
+    // Focus Coin Selector Dropdown Change
+    const coinSelect = document.getElementById('focus-coin-select');
+    if (coinSelect) {
+        coinSelect.addEventListener('change', (e) => {
+            selectFocusCoin(e.target.value);
+        });
+    }
     
     // Watchlist Toggle
     const starBtn = document.getElementById('watchlist-star-btn');
@@ -1844,8 +2008,8 @@ function setupMobileTabs() {
             navBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             
-            // Toggle body class
-            document.body.classList.remove('show-tab-focus', 'show-tab-alerts', 'show-tab-filters', 'show-tab-insights');
+            // Toggle body class and close drawer
+            document.body.classList.remove('show-tab-focus', 'show-tab-alerts', 'show-tab-filters', 'show-tab-insights', 'show-tab-settings', 'drawer-open');
             
             if (targetTab === 'tab-focus') {
                 document.body.classList.add('show-tab-focus');
@@ -1855,6 +2019,8 @@ function setupMobileTabs() {
                 document.body.classList.add('show-tab-filters');
             } else if (targetTab === 'tab-insights') {
                 document.body.classList.add('show-tab-insights');
+            } else if (targetTab === 'tab-settings') {
+                document.body.classList.add('show-tab-settings');
             }
             
             // Scroll to top of window to make sure they see the tab content
