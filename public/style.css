@@ -3012,6 +3012,14 @@ body.light-theme .theme-pill-btn.active {
         width: 100% !important;
         box-sizing: border-box;
     }
+
+    /* Hide coin search bar on non-Market tabs on mobile */
+    .coin-search-container {
+        display: none !important;
+    }
+    body.show-tab-focus .coin-search-container {
+        display: block !important;
+    }
 }
 
 

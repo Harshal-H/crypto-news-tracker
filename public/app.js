@@ -881,7 +881,7 @@ function renderNewsFeed() {
     }
     
     let html = '';
-    filtered.forEach((article, index) => {
+    filtered.forEach((article) => {
         const isSaved = state.bookmarks.some(b => b.link === article.link);
         const bookmarkClass = isSaved ? 'saved' : '';
         const bookmarkIcon = isSaved ? 'bookmark-check' : 'bookmark';
@@ -898,8 +898,12 @@ function renderNewsFeed() {
         // Sentiment Badge
         const sentCap = article.sentiment.charAt(0).toUpperCase() + article.sentiment.slice(1);
         
+        // Encode the article link as a safe identifier
+        const encodedLink = encodeURIComponent(article.link);
+        const listType = state.filters.showBookmarks ? 'bookmarks' : 'news';
+        
         html += `
-            <div class="news-card" onclick="openArticleDetails(${index}, '${state.filters.showBookmarks ? 'bookmarks' : 'news'}')">
+            <div class="news-card" onclick="openArticleDetails('${encodedLink}', '${listType}')">
                 <div class="news-img-container">
                     <img src="${imgUrl}" class="news-img" alt="News Thumbnail" onerror="this.src='https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=150&auto=format&fit=crop&q=60&ixlib=rb-4.0.3'">
                 </div>
@@ -921,7 +925,7 @@ function renderNewsFeed() {
                                 <i data-lucide="${getSentimentIcon(article.sentiment)}" style="width: 12px; height: 12px;"></i>
                                 ${sentCap}
                             </span>
-                            <button class="bookmark-btn ${bookmarkClass}" onclick="toggleBookmark(event, ${index}, '${state.filters.showBookmarks ? 'bookmarks' : 'news'}')" title="Save Article">
+                            <button class="bookmark-btn ${bookmarkClass}" onclick="toggleBookmarkByLink(event, '${encodedLink}', '${listType}')" title="Save Article">
                                 <i data-lucide="${bookmarkIcon}"></i>
                             </button>
                         </div>
@@ -1110,13 +1114,14 @@ function toggleAccordion(symbol) {
 // ==========================================================================
 // Details Modal Management
 // ==========================================================================
-function openArticleDetails(index, listType) {
+function openArticleDetails(encodedLink, listType) {
     const modal = document.getElementById('details-modal');
     const modalBody = document.getElementById('modal-body-content');
     if (!modal || !modalBody) return;
     
+    const link = decodeURIComponent(encodedLink);
     const list = listType === 'bookmarks' ? state.bookmarks : state.news;
-    const article = list[index];
+    const article = list.find(a => a.link === link);
     if (!article) return;
     
     const isSaved = state.bookmarks.some(b => b.link === article.link);
@@ -1187,6 +1192,29 @@ function toggleBookmark(event, index, listType) {
     if (!article) return;
     
     const existingIndex = state.bookmarks.findIndex(b => b.link === article.link);
+    if (existingIndex > -1) {
+        state.bookmarks.splice(existingIndex, 1);
+    } else {
+        state.bookmarks.push(article);
+    }
+    
+    // Save to LocalStorage
+    localStorage.setItem('pulse_bookmarks', JSON.stringify(state.bookmarks));
+    
+    updateBookmarkBadge();
+    renderNewsFeed();
+}
+
+function toggleBookmarkByLink(event, encodedLink, listType) {
+    // Prevent opening modal when clicking bookmark button
+    event.stopPropagation();
+    
+    const link = decodeURIComponent(encodedLink);
+    const list = listType === 'bookmarks' ? state.bookmarks : state.news;
+    const article = list.find(a => a.link === link);
+    if (!article) return;
+    
+    const existingIndex = state.bookmarks.findIndex(b => b.link === link);
     if (existingIndex > -1) {
         state.bookmarks.splice(existingIndex, 1);
     } else {
