@@ -26,29 +26,88 @@ const state = {
 function formatCoinPrice(price, symbol) {
     const val = parseFloat(price);
     if (isNaN(val)) return '0.00';
-    const isLowPriced = val < 10 || symbol === 'ADA' || symbol === 'XRP' || symbol === 'cardano' || symbol === 'ripple';
-    const decimals = isLowPriced ? 4 : 2;
-    return val.toLocaleString('en-US', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-    });
+    if (val < 0.00001)  return val.toFixed(8);   // ultra-low (e.g. SHIB)
+    if (val < 0.001)   return val.toFixed(6);
+    if (val < 1)       return val.toFixed(4);
+    if (val < 10)      return val.toFixed(3);
+    if (val < 1000)    return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatVolume(vol) {
+    if (!vol || vol === 0) return 'N/A';
+    if (vol >= 1e9) return '$' + (vol / 1e9).toFixed(1) + 'B';
+    if (vol >= 1e6) return '$' + (vol / 1e6).toFixed(1) + 'M';
+    if (vol >= 1e3) return '$' + (vol / 1e3).toFixed(1) + 'K';
+    return '$' + vol.toFixed(0);
+}
+
+// Static map for Binance WebSocket symbol → CoinGecko id
+// (covers likely top-25; also used as fallback in getCoinIdBySymbol)
 const coinIdMapping = {
-    'BTC': 'bitcoin',
-    'ETH': 'ethereum',
-    'SOL': 'solana',
-    'XRP': 'ripple',
-    'ADA': 'cardano'
+    'BTC':  'bitcoin',
+    'ETH':  'ethereum',
+    'BNB':  'binancecoin',
+    'SOL':  'solana',
+    'XRP':  'ripple',
+    'DOGE': 'dogecoin',
+    'ADA':  'cardano',
+    'TRX':  'tron',
+    'AVAX': 'avalanche-2',
+    'SHIB': 'shiba-inu',
+    'TON':  'the-open-network',
+    'LINK': 'chainlink',
+    'DOT':  'polkadot',
+    'BCH':  'bitcoin-cash',
+    'NEAR': 'near',
+    'SUI':  'sui',
+    'MATIC':'matic-network',
+    'LTC':  'litecoin',
+    'UNI':  'uniswap',
+    'ATOM': 'cosmos',
+    'ARB':  'arbitrum',
+    'OP':   'optimism',
+    'APT':  'aptos',
+    'XLM':  'stellar',
+    'ICP':  'internet-computer',
 };
 
+// Human-readable name map (fallback when state.prices not yet loaded)
 const coinNameMapping = {
-    'BTC': 'Bitcoin',
-    'ETH': 'Ethereum',
-    'SOL': 'Solana',
-    'XRP': 'Ripple',
-    'ADA': 'Cardano'
+    'BTC':  'Bitcoin',
+    'ETH':  'Ethereum',
+    'USDT': 'Tether',
+    'BNB':  'BNB',
+    'SOL':  'Solana',
+    'XRP':  'XRP',
+    'USDC': 'USD Coin',
+    'DOGE': 'Dogecoin',
+    'ADA':  'Cardano',
+    'TRX':  'TRON',
+    'AVAX': 'Avalanche',
+    'SHIB': 'Shiba Inu',
+    'TON':  'Toncoin',
+    'LINK': 'Chainlink',
+    'DOT':  'Polkadot',
+    'BCH':  'Bitcoin Cash',
+    'NEAR': 'NEAR Protocol',
+    'SUI':  'Sui',
+    'MATIC':'Polygon',
+    'LTC':  'Litecoin',
+    'UNI':  'Uniswap',
+    'ATOM': 'Cosmos',
+    'ARB':  'Arbitrum',
+    'OP':   'Optimism',
+    'APT':  'Aptos',
 };
+
+/** Resolve a ticker symbol (e.g. 'BTC') to a CoinGecko id.
+ *  Checks state.prices first (dynamic), falls back to static coinIdMapping. */
+function getCoinIdBySymbol(symbol) {
+    const entry = Object.entries(state.prices || {}).find(([, d]) => d.symbol === symbol);
+    if (entry) return entry[0];
+    return coinIdMapping[symbol] || null;
+}
 
 
 // ==========================================================================
@@ -587,18 +646,14 @@ function setupEventListeners() {
 // Rendering Engine
 // ==========================================================================
 function renderAll() {
-    // Restore standard filters view visibility in Crypto Mode
-    const filtersView = document.getElementById('sidebar-filters-view');
-    if (filtersView) {
-        const sidebarFiltersTab = document.querySelector('.sidebar-tab-btn[data-sidebar-tab="tab-filters"]');
-        if (!sidebarFiltersTab || sidebarFiltersTab.classList.contains('active')) {
-            filtersView.style.display = 'block';
-        } else {
-            filtersView.style.display = 'none';
+    // On desktop only: sync sidebar panel visibility
+    if (window.innerWidth > 900) {
+        const filtersView = document.getElementById('sidebar-filters-view');
+        if (filtersView) {
+            const tab = document.querySelector('.sidebar-tab-btn[data-sidebar-tab="tab-filters"]');
+            filtersView.style.display = (!tab || tab.classList.contains('active')) ? 'block' : 'none';
         }
     }
-    
-    // Render Crypto elements
     renderTicker();
     renderStatsCards();
     renderNewsFeed();
@@ -610,11 +665,8 @@ function renderAll() {
     renderActiveAlertsSidebar();
     renderAlertHistory();
     renderWatchlistManager();
-    
-    // Update the Coin Focus Panel (default to BTC if "All" is active)
     const activeCoin = state.filters.coin === 'All' ? 'BTC' : state.filters.coin;
     triggerCoinFocusUpdate(activeCoin);
-    
     lucide.createIcons();
 }
 
@@ -649,41 +701,28 @@ function renderErrorState() {
 function renderTicker() {
     const tickerContainer = document.getElementById('price-ticker');
     if (!tickerContainer) return;
-    
-    const coinMapping = {
-        'bitcoin': 'BTC',
-        'ethereum': 'ETH',
-        'solana': 'SOL',
-        'ripple': 'XRP',
-        'cardano': 'ADA'
-    };
-    
+
     let html = '<div class="ticker-track">';
-    
-    // Add two sets for continuous looping effect
     const renderItems = () => {
         let itemsHtml = '';
-        for (const [key, details] of Object.entries(state.prices)) {
-            const sym = coinMapping[key] || key.toUpperCase();
-            const price = formatCoinPrice(details.usd, sym);
-            const change = parseFloat(details.usd_24h_change || 0);
-            const isPos = change >= 0;
-            const changeIcon = isPos ? '▲' : '▼';
-            const changeClass = isPos ? 'pos' : 'neg';
-            
+        for (const [, data] of Object.entries(state.prices)) {
+            const sym   = data.symbol || '?';
+            const price = formatCoinPrice(data.usd, sym);
+            const change = parseFloat(data.usd_24h_change || 0);
+            const isPos  = change >= 0;
             itemsHtml += `
                 <div class="ticker-item" data-ticker-item="${sym}" onclick="filterByCoin('${sym}')">
-                    <span class="ticker-symbol">${sym}/USD</span>
+                    ${data.image ? `<img class="ticker-logo" src="${data.image}" alt="${sym}" onerror="this.style.display='none'">` : ''}
+                    <span class="ticker-symbol">${sym}</span>
                     <span class="ticker-price">$${price}</span>
-                    <span class="ticker-change ${changeClass}">${changeIcon} ${Math.abs(change).toFixed(2)}%</span>
+                    <span class="ticker-change ${isPos ? 'pos' : 'neg'}">${isPos ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%</span>
                 </div>
             `;
         }
         return itemsHtml;
     };
-    
     const trackContent = renderItems();
-    html += trackContent + trackContent + '</div>'; // duplicate list for smooth scroll wrap
+    html += trackContent + trackContent + '</div>';
     tickerContainer.innerHTML = html;
 }
 
@@ -797,20 +836,19 @@ function filterByCoin(symbol) {
 function selectFocusCoin(sym) {
     state.filters.coin = sym;
     state.filters.showBookmarks = false;
-    
     const bookmarkBtn = document.getElementById('bookmark-toggle-btn');
     if (bookmarkBtn) bookmarkBtn.classList.remove('active');
-    
-    document.querySelectorAll('#coin-volume-list .volume-item').forEach(el => {
-        el.classList.toggle('active', el.dataset.coin === sym);
-    });
-    
-    document.querySelectorAll('.stat-card').forEach(el => {
-        el.classList.toggle('active', el.dataset.coinCard === sym);
-    });
-    
+    document.querySelectorAll('#coin-volume-list .volume-item').forEach(el =>
+        el.classList.toggle('active', el.dataset.coin === sym));
+    document.querySelectorAll('.stat-card').forEach(el =>
+        el.classList.toggle('active', el.dataset.coinCard === sym));
     renderNewsFeed();
-    triggerCoinFocusUpdate(sym);
+    triggerCoinFocusUpdate(sym === 'All' ? 'BTC' : sym);
+    // On mobile: jump to Market tab so user sees the chart
+    if (window.innerWidth <= 900) {
+        const marketBtn = document.querySelector('.mobile-nav-btn[data-tab="tab-focus"]');
+        if (marketBtn && !marketBtn.classList.contains('active')) marketBtn.click();
+    }
 }
 
 /* 3. News Feed Stream */
@@ -1059,22 +1097,13 @@ function renderTrendingCoins() {
 function renderInsightsAccordion() {
     const container = document.getElementById('insights-accordion');
     if (!container || !state.summary.coinInsights) return;
-    
     const insights = state.summary.coinInsights;
-    const names = {
-        'BTC': 'Bitcoin (BTC)',
-        'ETH': 'Ethereum (ETH)',
-        'SOL': 'Solana (SOL)',
-        'XRP': 'Ripple (XRP)',
-        'ADA': 'Cardano (ADA)'
-    };
-    
     let html = '<div class="insights-list">';
-    
     for (const [symbol, details] of Object.entries(insights)) {
-        const title = names[symbol] || symbol;
+        // Resolve name from live prices or fallback map
+        const priceEntry = Object.values(state.prices || {}).find(d => d.symbol === symbol);
+        const title = priceEntry ? `${priceEntry.name} (${symbol})` : (coinNameMapping[symbol] ? `${coinNameMapping[symbol]} (${symbol})` : symbol);
         const sentimentClass = details.sentiment.toLowerCase();
-        
         html += `
             <div class="accordion-item" id="accordion-${symbol}">
                 <div class="accordion-header" onclick="toggleAccordion('${symbol}')">
@@ -1085,13 +1114,11 @@ function renderInsightsAccordion() {
                     <i data-lucide="chevron-down" class="accordion-arrow"></i>
                 </div>
                 <div class="accordion-content">
-                    <p style="margin-bottom: 8px;"><strong>Mentions:</strong> ${details.mentions} articles</p>
+                    <p style="margin-bottom:8px"><strong>Mentions:</strong> ${details.mentions} articles</p>
                     <p>${details.summary}</p>
                 </div>
-            </div>
-        `;
+            </div>`;
     }
-    
     html += '</div>';
     container.innerHTML = html;
 }
@@ -1319,122 +1346,99 @@ async function triggerCoinFocusUpdate(symbol) {
         document.getElementById('coin-focus-container').style.display = 'none';
         return;
     }
-    
     const container = document.getElementById('coin-focus-container');
     if (!container) return;
     container.style.display = 'flex';
-    
-    // Show loading skeleton if the coin selection or timeframe changes
     const cacheKey = symbol + '_' + state.chartDays;
     if (lastFetchedFocusSymbol !== cacheKey) {
-        let nameText = coinNameMapping[symbol] || symbol;
-        container.innerHTML = `
-            <div class="focus-loading">
-                <div class="pulse-dot"></div>
-                Fetching historical prices and financials for ${nameText}...
-            </div>
-        `;
+        const nameText = (Object.values(state.prices || {}).find(d => d.symbol === symbol) || {}).name
+                      || coinNameMapping[symbol] || symbol;
+        container.innerHTML = `<div class="focus-loading"><div class="pulse-dot"></div> Fetching data for ${nameText}...</div>`;
         lastFetchedFocusSymbol = cacheKey;
     }
-    
     try {
-        const coinId = coinIdMapping[symbol];
+        const coinId = getCoinIdBySymbol(symbol);
         if (!coinId) return;
-        
         const response = await fetch(`/api/historical?coin=${coinId}&days=${state.chartDays}`);
         const prices = await response.json();
-        
         if (response.ok && prices && prices.length > 0) {
             renderFocusCardContent(symbol, prices);
         } else {
-            container.innerHTML = `
-                <div class="focus-loading" style="color: var(--bearish);">
-                    <i data-lucide="alert-triangle"></i> Failed to load market chart.
-                </div>
-            `;
+            container.innerHTML = `<div class="focus-loading" style="color:var(--bearish)"><i data-lucide="alert-triangle"></i> Failed to load market chart.</div>`;
             lucide.createIcons();
         }
     } catch (e) {
-        console.error("Historical chart fetch error:", e);
+        console.error('Historical chart fetch error:', e);
     }
 }
 
 function renderFocusCardContent(symbol, pricesData) {
     const container = document.getElementById('coin-focus-container');
     if (!container) return;
-    
-    const coinId = coinIdMapping[symbol];
-    const coinName = coinNameMapping[symbol];
-    const coinPriceInfo = state.prices[coinId] || { usd: 0, usd_24h_change: 0 };
+
+    const coinId = getCoinIdBySymbol(symbol);
+    const coinData = state.prices[coinId] || {};
+    const coinName = coinData.name || coinNameMapping[symbol] || symbol;
+    const coinImage = coinData.image || '';
+    const coinPriceInfo = coinData;
     const priceText = formatCoinPrice(coinPriceInfo.usd, symbol);
-    
+
     const change = parseFloat(coinPriceInfo.usd_24h_change || 0);
     const isPos = change >= 0;
     const changeClass = isPos ? 'pos' : 'neg';
     const changeText = (isPos ? '+' : '') + change.toFixed(2) + '%';
-    
+
     const svgHtml = drawInteractiveChart(pricesData, isPos, symbol);
-    
+
     let coinSentimentVal = 0;
     if (state.summary.coinInsights && state.summary.coinInsights[symbol]) {
         const sent = state.summary.coinInsights[symbol].sentiment;
         if (sent === 'Bullish') coinSentimentVal = 70;
         else if (sent === 'Bearish') coinSentimentVal = -70;
     }
-    
-    let score = (0.6 * change * 15) + (0.4 * coinSentimentVal);
-    score = Math.max(-100, Math.min(100, score));
-    
-    let label = 'Neutral (Hold)';
-    let badgeClass = 'neutral';
-    let confidence = Math.round(50 + Math.abs(score) / 2);
-    let analysisMsg = '';
-    
+    let score = Math.max(-100, Math.min(100, (0.6 * change * 15) + (0.4 * coinSentimentVal)));
+    let label = 'Neutral (Hold)', badgeClass = 'neutral', analysisMsg = '';
+    const confidence = Math.round(50 + Math.abs(score) / 2);
     if (score >= 60) {
-        label = 'Strong Buy (Call)';
-        badgeClass = 'strong-buy';
-        analysisMsg = `Highly positive sentiment indicators. Strong price action (<strong>${changeText}</strong>) combined with bullish news flows supports an <strong>aggressive Call Option</strong> posture. Recommendation: Buy Call strikes 5% above spot. Stop loss: -3% from entry.`;
+        label = 'Strong Buy (Call)'; badgeClass = 'strong-buy';
+        analysisMsg = `Highly positive sentiment. Strong price action (<strong>${changeText}</strong>) supports aggressive Call Option. Recommendation: Buy Call strikes 5% above spot.`;
     } else if (score >= 15) {
-        label = 'Buy (Call)';
-        badgeClass = 'buy';
-        analysisMsg = `Favorable price momentum (<strong>${changeText}</strong>) and supportive news sentiment indicate an upward bias. Standard <strong>Call Option (Long Call)</strong> or Bull Call Spread strategies are recommended.`;
+        label = 'Buy (Call)'; badgeClass = 'buy';
+        analysisMsg = `Favorable momentum (<strong>${changeText}</strong>) and supportive sentiment indicate upward bias. Standard Long Call or Bull Call Spread recommended.`;
     } else if (score <= -60) {
-        label = 'Strong Sell (Put)';
-        badgeClass = 'strong-sell';
-        analysisMsg = `Heavy negative news flows and downward price pressure (<strong>${changeText}</strong>) indicate severe weakness. Outlook supports buying <strong>Put Options (Long Put)</strong> or executing Bear Put Spreads. Keep stops tight at recent resistance.`;
+        label = 'Strong Sell (Put)'; badgeClass = 'strong-sell';
+        analysisMsg = `Heavy negative news and downward pressure (<strong>${changeText}</strong>) indicate weakness. Long Put or Bear Put Spread advised.`;
     } else if (score <= -15) {
-        label = 'Sell (Put)';
-        badgeClass = 'sell';
-        analysisMsg = `Price shows short-term distribution pattern (<strong>${changeText}</strong>). Momentum is bearish. Target <strong>Put Option</strong> positions or sell Call option premium (Bear Call Spreads) to capitalize on decay.`;
+        label = 'Sell (Put)'; badgeClass = 'sell';
+        analysisMsg = `Distribution pattern (<strong>${changeText}</strong>). Bearish momentum. Target Put positions or Bear Call Spreads.`;
     } else {
-        label = 'Neutral (Hold)';
-        badgeClass = 'neutral';
-        analysisMsg = `Price action is consolidative (<strong>${changeText}</strong>) with balanced news flow. Volatility is contracting. Recommended options strategy: Range-bound premium selling (e.g., <strong>Iron Condors</strong> or <strong>Short Strangles</strong>).`;
+        analysisMsg = `Consolidating (<strong>${changeText}</strong>) with balanced news. Volatility contracting. Consider Iron Condors or Short Strangles.`;
     }
-    
     const sliderPercentage = 50 + score / 2;
-    
     const activeWatchlist = state.watchlists[state.activeWatchlistName] || [];
     const isStarred = activeWatchlist.includes(symbol);
+    const containingWatchlists = Object.keys(state.watchlists).filter(n => state.watchlists[n].includes(symbol));
+    const watchlistTagsHtml = containingWatchlists.map(n =>
+        `<span class="watchlist-tag">${n}</span>`).join('');
+
+    // Build dynamic select from state.prices
+    const selectOptions = Object.entries(state.prices || {})
+        .sort((a, b) => (a[1].market_cap_rank || 99) - (b[1].market_cap_rank || 99))
+        .map(([, d]) => {
+            const sym = d.symbol || '?';
+            return `<option value="${sym}" ${symbol === sym ? 'selected' : ''}>${d.name} (${sym})</option>`;
+        }).join('');
+
     const starClass = isStarred ? 'active' : '';
-    
-    const containingWatchlists = Object.keys(state.watchlists).filter(name => state.watchlists[name].includes(symbol));
-    const watchlistTagsHtml = containingWatchlists.map(name => `
-        <span class="watchlist-tag" style="font-size: 0.6rem; padding: 2px 6px; background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 10px; font-family: var(--font-body); font-weight: 600;">
-            ${name}
-        </span>
-    `).join('');
-    
+
+    // Inject rendered HTML with coin logo + dynamic dropdown
     container.innerHTML = `
         <div class="focus-header">
             <div class="focus-coin-info">
-                <h3 style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
-                    <select id="focus-coin-select" class="focus-coin-select" style="font-size: 1.05rem; font-family: var(--font-heading); font-weight: 700; padding: 4px 10px;">
-                        <option value="BTC" ${symbol === 'BTC' ? 'selected' : ''}>Bitcoin (BTC)</option>
-                        <option value="ETH" ${symbol === 'ETH' ? 'selected' : ''}>Ethereum (ETH)</option>
-                        <option value="SOL" ${symbol === 'SOL' ? 'selected' : ''}>Solana (SOL)</option>
-                        <option value="XRP" ${symbol === 'XRP' ? 'selected' : ''}>Ripple (XRP)</option>
-                        <option value="ADA" ${symbol === 'ADA' ? 'selected' : ''}>Cardano (ADA)</option>
+                <h3 style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
+                    ${coinImage ? `<img class="focus-coin-logo" src="${coinImage}" alt="${symbol}" onerror="this.style.display='none'">` : ''}
+                    <select id="focus-coin-select" class="focus-coin-select">
+                        ${selectOptions}
                     </select>
                     <button class="bell-btn" id="bell-alert-btn" title="Set Price Alert" style="padding: 0; display: inline-flex; justify-content: center; align-items: center;">
                         <i data-lucide="bell" style="width: 14px; height: 14px;"></i>
@@ -1894,83 +1898,64 @@ function setupChartHoverHandlers(pricesData, symbol) {
 }
 
 
+/* 9. Volume List — fully dynamic from state.prices */
 function renderVolumeList() {
     const container = document.getElementById('coin-volume-list');
     if (!container || !state.prices) return;
-    
-    const coins = [
-        { id: 'bitcoin', name: 'Bitcoin', symbol: 'BTC' },
-        { id: 'ethereum', name: 'Ethereum', symbol: 'ETH' },
-        { id: 'solana', name: 'Solana', symbol: 'SOL' },
-        { id: 'ripple', name: 'Ripple', symbol: 'XRP' },
-        { id: 'cardano', name: 'Cardano', symbol: 'ADA' }
-    ];
-    
-    // Find max volume to calculate width percentages
+
+    const entries = Object.entries(state.prices)
+        .sort((a, b) => (a[1].market_cap_rank || 99) - (b[1].market_cap_rank || 99));
+
     let maxVolume = 0;
-    coins.forEach(coin => {
-        const details = state.prices[coin.id] || { usd_24h_vol: 0 };
-        const vol = parseFloat(details.usd_24h_vol || 0);
-        if (vol > maxVolume) maxVolume = vol;
-    });
-    
-    // Render All Coins row first
+    entries.forEach(([, d]) => { const v = parseFloat(d.usd_24h_vol || 0); if (v > maxVolume) maxVolume = v; });
+
     const isAllActive = state.filters.coin === 'All';
-    const allActiveClass = isAllActive ? 'active' : '';
     let html = `
-        <div class="volume-item ${allActiveClass}" data-coin="All">
+        <div class="volume-item ${isAllActive ? 'active' : ''}" data-coin="All">
             <div class="volume-info-row">
-                <div>
-                    <span class="volume-coin-symbol">ALL</span>
-                    <span class="volume-coin-name">All Coins</span>
+                <div class="vol-coin-left">
+                    <div class="vol-coin-name-wrap">
+                        <span class="volume-coin-symbol">ALL</span>
+                        <span class="volume-coin-name">All Coins</span>
+                    </div>
                 </div>
                 <span class="volume-value">Market Feed</span>
             </div>
-            <div class="volume-bar-container">
-                <div class="volume-bar-fill" style="width: 100%;"></div>
-            </div>
-        </div>
-    `;
-    
-    coins.forEach(coin => {
-        const details = state.prices[coin.id] || { usd_24h_vol: 0 };
-        const vol = parseFloat(details.usd_24h_vol || 0);
-        const formattedVol = vol > 0 ? '$' + Math.round(vol).toLocaleString() : 'N/A';
-        
-        const isActive = state.filters.coin === coin.symbol;
-        const activeClass = isActive ? 'active' : '';
-        
-        // Calculate width percentage relative to max volume
-        const ratio = maxVolume > 0 ? (vol / maxVolume) * 100 : 0;
-        const barWidth = Math.max(5, ratio); // at least 5% bar
-        
-        // Watchlist marks
-        const inActiveWatchlist = (state.watchlists[state.activeWatchlistName] || []).includes(coin.symbol);
-        const inAnyWatchlist = Object.values(state.watchlists).some(list => list.includes(coin.symbol));
-        let starIconHtml = '';
-        if (inActiveWatchlist) {
-            starIconHtml = `<i data-lucide="star" style="width: 11px; height: 11px; fill: #eab308; stroke: #eab308; margin-left: 4px; display: inline-block; vertical-align: middle;"></i>`;
-        } else if (inAnyWatchlist) {
-            starIconHtml = `<i data-lucide="star" style="width: 11px; height: 11px; stroke: #eab308; margin-left: 4px; display: inline-block; vertical-align: middle;"></i>`;
-        }
-        
+            <div class="volume-bar-container"><div class="volume-bar-fill" style="width:100%"></div></div>
+        </div>`;
+
+    entries.forEach(([id, data]) => {
+        const symbol = data.symbol || id.toUpperCase();
+        const name   = data.name   || symbol;
+        const vol    = parseFloat(data.usd_24h_vol || 0);
+        const image  = data.image  || '';
+        const isActive = state.filters.coin === symbol;
+        const barW   = maxVolume > 0 ? Math.max(4, (vol / maxVolume) * 100) : 4;
+
+        const inActiveWL = (state.watchlists[state.activeWatchlistName] || []).includes(symbol);
+        const inAnyWL    = Object.values(state.watchlists).some(l => l.includes(symbol));
+        let starHtml = '';
+        if (inActiveWL)   starHtml = `<i data-lucide="star" style="width:10px;height:10px;fill:#eab308;stroke:#eab308;margin-left:3px;"></i>`;
+        else if (inAnyWL) starHtml = `<i data-lucide="star" style="width:10px;height:10px;stroke:#eab308;margin-left:3px;"></i>`;
+
         html += `
-            <div class="volume-item ${activeClass}" data-coin="${coin.symbol}">
-                <div class="volume-info-row">
-                    <div>
-                        <span class="volume-coin-symbol">${coin.symbol} ${starIconHtml}</span>
-                        <span class="volume-coin-name">${coin.name}</span>
+        <div class="volume-item ${isActive ? 'active' : ''}" data-coin="${symbol}">
+            <div class="volume-info-row">
+                <div class="vol-coin-left">
+                    ${image ? `<img class="volume-coin-logo" src="${image}" alt="${symbol}" onerror="this.style.display='none'">` : `<div class="volume-coin-logo-fallback">${symbol.charAt(0)}</div>`}
+                    <div class="vol-coin-name-wrap">
+                        <span class="volume-coin-symbol">${symbol}${starHtml}</span>
+                        <span class="volume-coin-name">${name}</span>
                     </div>
-                    <span class="volume-value">${formattedVol}</span>
                 </div>
-                <div class="volume-bar-container">
-                    <div class="volume-bar-fill" style="width: ${barWidth}%;"></div>
-                </div>
+                <span class="volume-value">${formatVolume(vol)}</span>
             </div>
-        `;
+            <div class="volume-bar-container"><div class="volume-bar-fill" style="width:${barW}%"></div></div>
+        </div>`;
     });
-    
+
     container.innerHTML = html;
+    lucide.createIcons();
 }
 
 // ==========================================================================
@@ -2223,34 +2208,35 @@ function playAlertSound() {
 }
 
 function setupMobileTabs() {
-    // Set default active tab class on body
     document.body.classList.add('show-tab-focus');
-    
     const navBtns = document.querySelectorAll('.mobile-nav-btn');
     navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const targetTab = btn.dataset.tab;
-            
-            // Toggle active button style
             navBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
-            // Toggle body class and close drawer
-            document.body.classList.remove('show-tab-focus', 'show-tab-alerts', 'show-tab-filters', 'show-tab-insights', 'show-tab-settings', 'drawer-open');
-            
+            document.body.classList.remove(
+                'show-tab-focus','show-tab-alerts','show-tab-filters',
+                'show-tab-insights','show-tab-settings','drawer-open'
+            );
+            const filtersView  = document.getElementById('sidebar-filters-view');
+            const settingsView = document.getElementById('sidebar-settings-view');
             if (targetTab === 'tab-focus') {
                 document.body.classList.add('show-tab-focus');
             } else if (targetTab === 'tab-alerts') {
                 document.body.classList.add('show-tab-alerts');
             } else if (targetTab === 'tab-filters') {
                 document.body.classList.add('show-tab-filters');
+                // clear hidden-panel so CSS show-tab-filters rules apply
+                if (filtersView)  filtersView.classList.remove('hidden-panel');
+                if (settingsView) settingsView.classList.add('hidden-panel');
             } else if (targetTab === 'tab-insights') {
                 document.body.classList.add('show-tab-insights');
             } else if (targetTab === 'tab-settings') {
                 document.body.classList.add('show-tab-settings');
+                if (filtersView)  filtersView.classList.add('hidden-panel');
+                if (settingsView) settingsView.classList.remove('hidden-panel');
             }
-            
-            // Scroll to top of window to make sure they see the tab content
             window.scrollTo({ top: 0, behavior: 'instant' });
         });
     });
@@ -2272,14 +2258,16 @@ function calculateSMA(prices, period = 7) {
 
 let liveWs = null;
 function initLiveWebSocket() {
+    // Top-20 Binance streams (stablecoins skipped — USDT/USDC have no USD pair)
     const streams = [
-        'btcusdt@ticker',
-        'ethusdt@ticker',
-        'solusdt@ticker',
-        'xrpusdt@ticker',
-        'adausdt@ticker'
+        'btcusdt@ticker','ethusdt@ticker','bnbusdt@ticker',
+        'solusdt@ticker','xrpusdt@ticker','dogeusdt@ticker',
+        'adausdt@ticker','trxusdt@ticker','avaxusdt@ticker',
+        'shibusdt@ticker','tonusdt@ticker','linkusdt@ticker',
+        'dotusdt@ticker','bchusdt@ticker','nearusdt@ticker',
+        'suiusdt@ticker','maticusdt@ticker','ltcusdt@ticker',
+        'uniusdt@ticker','atomusdt@ticker'
     ].join('/');
-    
     const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
     
     try {

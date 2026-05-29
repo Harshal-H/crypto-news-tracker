@@ -127,9 +127,17 @@ body {
 .ticker-item {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    margin-right: 48px;
+    gap: 6px;
+    margin-right: 40px;
     cursor: pointer;
+}
+
+.ticker-logo {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
 }
 
 .ticker-symbol {
@@ -287,79 +295,156 @@ body {
     border: 1px solid var(--border-color);
     backdrop-filter: blur(16px);
     border-radius: var(--radius-lg);
-    padding: 16px 20px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    height: 120px;
+    min-height: 130px;
     transition: var(--transition);
     position: relative;
     overflow: hidden;
+    cursor: pointer;
 }
 
 .stat-card::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%);
     pointer-events: none;
 }
 
 .stat-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-3px);
     border-color: var(--accent-cyan);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 15px rgba(0, 242, 254, 0.1);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3), 0 0 15px rgba(0,242,254,0.1);
 }
 
-.stat-header {
+.stat-card.active {
+    border-color: var(--accent-cyan);
+    background: rgba(0,242,254,0.04);
+}
+
+/* Top row: logo + symbol + rank + badges */
+.stat-card-top {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
 }
 
-.stat-coin-name {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-secondary);
+.stat-coin-id {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
 }
 
-.stat-coin-symbol {
-    font-size: 1rem;
+.coin-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.05);
+}
+
+.coin-logo-fallback {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--grad-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #000;
+    flex-shrink: 0;
+}
+
+.stat-coin-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.stat-symbol {
     font-family: var(--font-heading);
-    font-weight: 700;
+    font-size: 0.88rem;
+    font-weight: 800;
     color: var(--text-primary);
+    line-height: 1;
+}
+
+.stat-rank {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    line-height: 1;
+}
+
+.stat-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.card-star {
+    width: 12px;
+    height: 12px;
+    stroke: #eab308;
+}
+.card-star.filled { fill: #eab308; }
+
+.mini-sent-badge {
+    font-size: 0.52rem;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.mini-sent-badge.bullish { color: var(--bullish); background: rgba(16,185,129,0.1); }
+.mini-sent-badge.bearish { color: var(--bearish); background: rgba(244,63,94,0.1); }
+.mini-sent-badge.neutral { color: var(--text-muted); background: rgba(255,255,255,0.05); }
+
+/* Coin name below logo row */
+.stat-name {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
 }
 
 .stat-sparkline {
-    width: 60px;
-    height: 24px;
+    width: 100%;
+    height: 28px;
+    margin-bottom: 4px;
 }
 
 .stat-body {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    margin-top: 12px;
+    margin-top: auto;
 }
 
 .stat-price {
     font-family: var(--font-heading);
-    font-size: 1.4rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--text-primary);
 }
 
 .stat-change {
-    font-size: 0.8rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 2px;
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
 .stat-change.pos { color: var(--bullish); }
@@ -1563,12 +1648,12 @@ body {
     background: rgba(255, 255, 255, 0.015);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 12px 14px;
+    padding: 10px 12px;
     cursor: pointer;
     transition: var(--transition);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
     position: relative;
     overflow: hidden;
 }
@@ -1588,10 +1673,8 @@ body {
 .volume-item.active::before {
     content: '';
     position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    width: 3px;
+    left: 0; top: 0;
+    height: 100%; width: 3px;
     background: var(--grad-primary);
 }
 
@@ -1599,32 +1682,74 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 6px;
+}
+
+/* Left side of volume row: logo + names */
+.vol-coin-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.volume-coin-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.volume-coin-logo-fallback {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--grad-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.55rem;
+    font-weight: 800;
+    color: #000;
+    flex-shrink: 0;
+}
+
+.vol-coin-name-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
 }
 
 .volume-coin-name {
-    font-size: 0.75rem;
+    font-size: 0.68rem;
     font-weight: 500;
-    color: var(--text-secondary);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .volume-coin-symbol {
     font-family: var(--font-heading);
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-primary);
-    margin-right: 6px;
+    white-space: nowrap;
 }
 
 .volume-value {
     font-family: var(--font-heading);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 700;
     color: var(--accent-cyan);
+    flex-shrink: 0;
 }
 
 .volume-bar-container {
     width: 100%;
-    height: 4px;
+    height: 3px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 2px;
     overflow: hidden;
@@ -2004,6 +2129,46 @@ body {
     
     body.show-tab-filters .control-panel .alerts-sidebar-section {
         display: none !important;
+    }
+    /* Show filters view, override hidden-panel */
+    body.show-tab-filters .control-panel #sidebar-filters-view {
+        display: block !important;
+    }
+    body.show-tab-filters .control-panel #sidebar-filters-view.hidden-panel {
+        display: block !important;
+    }
+    body.show-tab-filters .control-panel #sidebar-settings-view {
+        display: none !important;
+    }
+    body.show-tab-filters .control-panel #sidebar-filters-view > * {
+        display: block !important;
+    }
+    body.show-tab-filters .control-panel #sidebar-filters-view .source-filters,
+    body.show-tab-filters .control-panel #sidebar-filters-view .sentiment-filters {
+        display: flex !important;
+    }
+    body.show-tab-filters .control-panel #sidebar-filters-view .volume-list {
+        display: flex !important;
+        flex-direction: column;
+    }
+
+    /* Settings Tab: show settings panel only */
+    body.show-tab-settings .control-panel {
+        display: flex !important;
+        flex-direction: column;
+        width: 100%;
+    }
+    body.show-tab-settings .control-panel > * {
+        display: none !important;
+    }
+    body.show-tab-settings .control-panel .control-panel-header {
+        display: none !important;
+    }
+    body.show-tab-settings .control-panel #sidebar-settings-view {
+        display: block !important;
+    }
+    body.show-tab-settings .control-panel #sidebar-settings-view.hidden-panel {
+        display: block !important;
     }
 
     /* Insights Tab */
@@ -2570,11 +2735,22 @@ body.light-theme .coin-search-item {
     color: var(--text-primary);
     border-radius: var(--radius-sm);
     padding: 4px 8px;
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 0.95rem;
+    font-family: var(--font-heading);
+    font-weight: 700;
     outline: none;
     cursor: pointer;
     transition: var(--transition);
+}
+
+/* Focus card coin logo */
+.focus-coin-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    vertical-align: middle;
 }
 body.light-theme .focus-coin-select {
     background: rgba(15, 23, 42, 0.03);

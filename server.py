@@ -53,13 +53,38 @@ NEG_WORDS = {
     'crackdown', 'probe', 'reject', 'rejected', 'suspension', 'suspend'
 }
 
-# Coin mappings for tagging and filtering
+# Coin mappings for news tagging and filtering (covers all likely top-20 + extras)
 COIN_TAGS = {
-    'BTC': ['bitcoin', 'btc'],
-    'ETH': ['ethereum', 'eth', 'ether'],
-    'SOL': ['solana', 'sol'],
-    'XRP': ['ripple', 'xrp'],
-    'ADA': ['cardano', 'ada']
+    'BTC':  ['bitcoin', 'btc'],
+    'ETH':  ['ethereum', 'eth', 'ether'],
+    'USDT': ['tether', 'usdt'],
+    'BNB':  ['bnb', 'binance coin', 'binance smart chain', 'bsc'],
+    'SOL':  ['solana', 'sol'],
+    'XRP':  ['ripple', 'xrp'],
+    'USDC': ['usd coin', 'usdc'],
+    'DOGE': ['dogecoin', 'doge'],
+    'ADA':  ['cardano', 'ada'],
+    'TRX':  ['tron', 'trx'],
+    'AVAX': ['avalanche', 'avax'],
+    'SHIB': ['shiba', 'shib', 'shiba inu'],
+    'TON':  ['toncoin', 'ton', 'the open network'],
+    'LINK': ['chainlink', 'link'],
+    'DOT':  ['polkadot', 'dot'],
+    'BCH':  ['bitcoin cash', 'bch'],
+    'NEAR': ['near protocol', 'near'],
+    'SUI':  ['sui network', 'sui'],
+    'MATIC':['polygon', 'matic', 'pol'],
+    'LTC':  ['litecoin', 'ltc'],
+    'UNI':  ['uniswap', 'uni'],
+    'ATOM': ['cosmos', 'atom'],
+    'ARB':  ['arbitrum', 'arb'],
+    'OP':   ['optimism', 'op'],
+    'APT':  ['aptos', 'apt'],
+    'XLM':  ['stellar', 'xlm'],
+    'ICP':  ['internet computer', 'icp'],
+    'FIL':  ['filecoin', 'fil'],
+    'HBAR': ['hedera', 'hbar'],
+    'IMX':  ['immutable', 'imx'],
 }
 
 
@@ -411,37 +436,74 @@ def generate_summary():
     }
 
 def fetch_live_prices():
-    """Proxy CoinGecko simple price fetch with local caching."""
+    """Fetch top 20 coins by market cap from CoinGecko with enriched data (name, symbol, image)."""
     current_time = time.time()
     if PRICE_CACHE['data'] and (current_time - PRICE_CACHE['last_updated'] < PRICE_CACHE['expiry']):
         return PRICE_CACHE['data']
-        
-    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple,cardano&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true"
+
+    url = (
+        "https://api.coingecko.com/api/v3/coins/markets"
+        "?vs_currency=usd&order=market_cap_desc&per_page=20&page=1"
+        "&sparkline=false&price_change_percentage=24h"
+    )
     headers = {'User-Agent': 'Mozilla/5.0'}
     req = urllib.request.Request(url, headers=headers)
-    
+
     try:
-        print("Proxying CoinGecko price data with volume...")
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode('utf-8'))
+        print("Fetching top 20 coins by market cap from CoinGecko...")
+        with urllib.request.urlopen(req, timeout=8) as response:
+            coins_list = json.loads(response.read().decode('utf-8'))
+            data = {}
+            for coin in coins_list:
+                coin_id = coin.get('id', '')
+                data[coin_id] = {
+                    'usd':             coin.get('current_price', 0),
+                    'usd_24h_change':  coin.get('price_change_percentage_24h', 0),
+                    'usd_24h_vol':     coin.get('total_volume', 0),
+                    'name':            coin.get('name', ''),
+                    'symbol':          coin.get('symbol', '').upper(),
+                    'image':           coin.get('image', ''),
+                    'market_cap_rank': coin.get('market_cap_rank', 0),
+                }
             PRICE_CACHE['data'] = data
             PRICE_CACHE['last_updated'] = current_time
             return data
     except Exception as e:
         print(f"Error fetching prices from CoinGecko: {e}")
-        # Fallback to previous cache if available, else mock data
         if PRICE_CACHE['data']:
             print("Using stale price cache.")
             return PRICE_CACHE['data']
-            
-        # Hardcoded mock values as safety net
+
+        # Hardcoded mock fallback — approximate top 20
         print("Returning fallback mock prices.")
+        mock = [
+            ('bitcoin',          'Bitcoin',          'BTC',  72000,    2.7,  35000000000, 1),
+            ('ethereum',         'Ethereum',         'ETH',  2000,     3.8,  18000000000, 2),
+            ('tether',           'Tether',           'USDT', 1.0,      0.01, 90000000000, 3),
+            ('binancecoin',      'BNB',              'BNB',  600,      1.2,  2000000000,  4),
+            ('solana',           'Solana',           'SOL',  165,      3.6,  4000000000,  5),
+            ('ripple',           'XRP',              'XRP',  0.52,     2.0,  2100000000,  6),
+            ('usd-coin',         'USDC',             'USDC', 1.0,      0.01, 8000000000,  7),
+            ('dogecoin',         'Dogecoin',         'DOGE', 0.12,    -1.2,  900000000,   8),
+            ('cardano',          'Cardano',          'ADA',  0.44,     1.5,  430000000,   9),
+            ('tron',             'TRON',             'TRX',  0.12,     0.9,  560000000,  10),
+            ('avalanche-2',      'Avalanche',        'AVAX', 35.0,     2.1,  460000000,  11),
+            ('shiba-inu',        'Shiba Inu',        'SHIB', 0.000022,-2.3,  430000000,  12),
+            ('the-open-network', 'Toncoin',          'TON',  5.5,      4.1,  450000000,  13),
+            ('chainlink',        'Chainlink',        'LINK', 15.0,     1.5,  345000000,  14),
+            ('polkadot',         'Polkadot',         'DOT',  7.5,     -0.8,  235000000,  15),
+            ('bitcoin-cash',     'Bitcoin Cash',     'BCH',  350,      1.0,  400000000,  16),
+            ('near',             'NEAR Protocol',    'NEAR', 7.0,      3.2,  235000000,  17),
+            ('sui',              'Sui',              'SUI',  1.2,      5.3,  680000000,  18),
+            ('matic-network',    'Polygon',          'MATIC',0.55,     0.9,  188000000,  19),
+            ('litecoin',         'Litecoin',         'LTC',  85.0,     0.5,  568000000,  20),
+        ]
         return {
-            "bitcoin": {"usd": 76906.50, "usd_24h_change": 2.70, "usd_24h_vol": 35466481039},
-            "ethereum": {"usd": 2116.97, "usd_24h_change": 3.82, "usd_24h_vol": 18240500120},
-            "solana": {"usd": 86.15, "usd_24h_change": 3.67, "usd_24h_vol": 31206500800},
-            "ripple": {"usd": 1.36, "usd_24h_change": 1.96, "usd_24h_vol": 2145900500},
-            "cardano": {"usd": 0.244, "usd_24h_change": 1.56, "usd_24h_vol": 435010900}
+            cid: {
+                'usd': p, 'usd_24h_change': ch, 'usd_24h_vol': vol,
+                'name': n, 'symbol': sym, 'image': '', 'market_cap_rank': rank
+            }
+            for cid, n, sym, p, ch, vol, rank in mock
         }
 
 
@@ -450,12 +512,27 @@ def generate_mock_historical(coin, days='1'):
     now_ms = int(time.time() * 1000)
     prices = []
     base_price = {
-        'bitcoin': 76800.0,
-        'ethereum': 2110.0,
-        'solana': 86.1,
-        'ripple': 1.36,
-        'cardano': 0.244
-    }.get(coin, 100.0)
+        'bitcoin': 72000.0,
+        'ethereum': 2000.0,
+        'tether': 1.0,
+        'binancecoin': 600.0,
+        'solana': 165.0,
+        'ripple': 0.52,
+        'usd-coin': 1.0,
+        'dogecoin': 0.12,
+        'cardano': 0.44,
+        'tron': 0.12,
+        'avalanche-2': 35.0,
+        'shiba-inu': 0.000022,
+        'the-open-network': 5.5,
+        'chainlink': 15.0,
+        'polkadot': 7.5,
+        'bitcoin-cash': 350.0,
+        'near': 7.0,
+        'sui': 1.2,
+        'matic-network': 0.55,
+        'litecoin': 85.0,
+    }.get(coin, 1.0)
     
     try:
         days_int = int(days)
